@@ -12,3 +12,18 @@ export const listCardsQuerySchema = z.object({
 });
 
 export type ListCardsQuery = z.infer<typeof listCardsQuerySchema>;
+
+type RawQuery = Record<string,string|string[] | undefined>
+
+export function parseListCardsQuery(input:  RawQuery){
+  console.log(input)
+  const cleaned:Record<string,string>={}
+
+  for(const [key,raw] of Object.entries(input)){
+    const value =(Array.isArray(raw)?raw[0]:raw)?.trim()
+    if(value){
+      cleaned[key] = value
+    }
+  } 
+  return listCardsQuerySchema.safeParse(cleaned);
+}

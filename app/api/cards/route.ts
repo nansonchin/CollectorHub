@@ -1,15 +1,10 @@
-import { listCardsQuerySchema } from "@/src/features/cards/cards.schema";
+import { listCardsQuerySchema, parseListCardsQuery } from "@/src/features/cards/cards.schema";
 import { listCards } from "@/src/features/cards/cards.service";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const raw = Object.fromEntries(
-    [...request.nextUrl.searchParams.entries()].filter(
-      ([, value]) => value !== "",
-    ),
-  );
-
-  const parsed = listCardsQuerySchema.safeParse(raw);
+  console.log("URL SEARCH PARAMS",request.nextUrl.searchParams)
+  const parsed = parseListCardsQuery(Object.fromEntries(request.nextUrl.searchParams))
 
   if (!parsed.success) {
     return NextResponse.json(

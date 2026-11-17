@@ -1,10 +1,27 @@
+import { Pagination } from "@/src/components/ui/Pagination";
+import { listCardsQuerySchema, parseListCardsQuery } from "@/src/features/cards/cards.schema";
 import { listCards } from "@/src/features/cards/cards.service";
+import { collectionHref } from "@/src/features/cards/cards.url";
 import { CardTile } from "@/src/features/cards/components/CardTile";
+import { CollectionFilters } from "@/src/features/cards/components/CollectionFilters";
+import Link from "next/link";
 
-export const dynamic = "force-dynamic";
+type SearchParams = Record<string, string | string[] | undefined>;
 
-export default async function CollectionPage() {
-  const { items, total } = await listCards({ page: 1, pageSize: 50 });
+export default async function CollectionPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const parsed = parseListCardsQuery(await searchParams);
+
+  const query = parsed.success ? parsed.data : listCardsQuerySchema.parse({});
+
+  const { items, total, page, pageSize, totalPages } = await listCards(query);
+
+  const { q, element, rarity } = query;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
 
   return (
     <div className="relative overflow-x-clip">
@@ -19,16 +36,55 @@ export default async function CollectionPage() {
         <section>
           <header className="mb-6">
             <h1 className="font-display text-4xl font-extrabold">Collection</h1>
-            <p className="mt-1 text-mute">{total} cards in the catalog</p>
+            <p className="mt-1 text-mute">
+              {items.length > 0
+                ? `Showing ${from}–${to} of ${total} cards`
+                : "No cards to show"}
+            </p>
           </header>
 
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {items.map((card) => (
-              <li key={card.id}>
-                <CardTile card={card} />
-              </li>
-            ))}
-          </ul>
+          <CollectionFilters q={q} element={element} rarity={rarity} />
+
+          <div className="mt-8">
+            {items.length > 0 ? (
+              <>
+                <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {items.map((card) => (
+                    <li key={card.id}>
+                      <CardTile card={card} />
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-10">
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    hrefFor={(p) => collectionHref({ q, element, rarity, page: p })}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="rounded-[28px] bg-white p-10 text-center shadow-soft">
+                <h2 className="font-display text-xl font-bold">
+                  {total === 0
+                    ? "No cards match these filters"
+                    : "That page doesn't exist"}
+                </h2>
+                <p className="mt-1 text-mute">
+                  {total === 0
+                    ? "Try a different name, or remove a filter."
+                    : `This list only has ${totalPages} ${totalPages === 1 ? "page" : "pages"}.`}
+                </p>
+                <Link
+                  href={total === 0 ? "/collection" : collectionHref({ q, element, rarity })}
+                  className="mt-5 inline-flex h-11 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  {total === 0 ? "Clear filters" : "Go to page 1"}
+                </Link>
+              </div>
+            )}
+          </div>
         </section>
 
         <aside className="hidden lg:block">
