@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Element {
+  FIRE
+  WATER
+  EARTH
+  DARK
+  LIGHT
+}
+
+enum Rarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+}
+
+model Card {
+  id          String   @id @default(cuid())
+  number      Int      @unique 
+  name        String   @unique
+  description String
+  element     Element
+  rarity      Rarity
+  attack      Int
+  defense     Int
+  imageUrl    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([element])
+  @@index([rarity])
+}
