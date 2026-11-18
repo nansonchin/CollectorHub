@@ -83,7 +83,7 @@ export function CollectionFilters({ q, element, rarity }: Props) {
           aria-label="Search"
           className={`grid size-11 shrink-0 place-items-center rounded-xl bg-gold-500 text-white ${focusRing}`}
         >
-          <Search size={18} aria-hidden />
+          <Search size={18} aria-hidden /> 
         </button>
       </form>
         <div className="mt-5 space-y-3">
@@ -97,6 +97,7 @@ export function CollectionFilters({ q, element, rarity }: Props) {
               href={collectionHref({
                 q,
                 rarity,
+                //element already been selected. If select one more will be deactive
                 element: element === value ? undefined : value,
               })}
               active={element === value}

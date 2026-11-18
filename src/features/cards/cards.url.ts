@@ -3,6 +3,7 @@ type CollectionFilters = {
   element?: string;
   rarity?: string;
   page?: number;
+  card?:number
 };
 
 export function collectionHref(filters: CollectionFilters = {}) {
@@ -14,6 +15,7 @@ export function collectionHref(filters: CollectionFilters = {}) {
 
   if (filters.page && filters.page > 1)
     params.set("page", String(filters.page));
+   if (filters.card) params.set("card", String(filters.card));
   const queryString = params.toString();
   return queryString ? `/collection?${queryString}` : "/collection";
 }
