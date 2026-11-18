@@ -1,0 +1,1 @@
+export const STARTER_GOLD=1000;

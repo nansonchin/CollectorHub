@@ -1,4 +1,7 @@
- "use client"
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
   Backpack,
@@ -7,13 +10,10 @@ import {
   ScrollText,
   Shield,
   Store,
-  User,
 } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/collection", label: "Collecton", icon: LayoutGrid, enabled: true },
+  { href: "/collection", label: "Collection", icon: LayoutGrid, enabled: true },
   { href: "/market", label: "Market", icon: Store, enabled: false },
   { href: "/inventory", label: "Inventory", icon: Backpack, enabled: false },
   { href: "/quests", label: "Quests", icon: ScrollText, enabled: false },
@@ -24,10 +24,11 @@ const NAV_ITEMS = [
 const itemBase =
   "flex h-11 shrink-0 items-center gap-2 border-b-[3px] px-3 text-sm font-semibold";
 
-export function TopNav() {
+export function TopNav({ user }: { user: { name: string } | null }) {
   const pathname = usePathname();
+
   return (
-    <header className="relative z-20 flex-items-center gap-3 rounded-[28px] bg-white px-4 shadow-soft sm:gap-5 sm:px-6">
+    <header className="relative z-20 flex items-center gap-3 rounded-[28px] bg-white px-4 shadow-soft sm:gap-5 sm:px-6">
       <Link href="/" className="flex shrink-0 items-center gap-2.5 py-3">
         <span aria-hidden className="flex items-center gap-[3px]">
           <i className="block h-6 w-2.5 -skew-x-12 bg-gold-500" />
@@ -37,9 +38,10 @@ export function TopNav() {
           CollectorHub
         </span>
       </Link>
+
       <nav
         aria-label="Main"
-        className="flex flex-1 items-center  gap-1 overflow-x-auto pt-[3px]"
+        className="flex flex-1 items-center gap-1 overflow-x-auto pt-[3px]"
       >
         {NAV_ITEMS.map(({ href, label, icon: Icon, enabled }) => {
           if (!enabled) {
@@ -55,8 +57,8 @@ export function TopNav() {
               </span>
             );
           }
-          const active = pathname.startsWith(href);
 
+          const active = pathname.startsWith(href);
           return (
             <Link
               key={href}
@@ -74,7 +76,8 @@ export function TopNav() {
           );
         })}
       </nav>
-        <div className="flex shrink-0 items-center gap-1 py-3">
+
+      <div className="flex shrink-0 items-center gap-1 py-3">
         <button
           type="button"
           disabled
@@ -83,14 +86,28 @@ export function TopNav() {
         >
           <Bell size={18} aria-hidden />
         </button>
-        <button
-          type="button"
-          disabled
-          aria-label="Profile"
-          className="grid size-10 place-items-center rounded-full bg-paper text-mute/60"
-        >
-          <User size={18} aria-hidden />
-        </button>
+        {user ? (
+          <Link
+            href="/account"
+            aria-label={`Account: ${user.name}`}
+            className="flex h-10 items-center gap-2 rounded-full bg-paper pl-1 pr-1 text-sm font-semibold hover:bg-gold-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:pr-4"
+          >
+            <span
+              aria-hidden
+              className="grid size-8 place-items-center rounded-full bg-ink text-xs font-bold text-white"
+            >
+              {user.name.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <span className="hidden max-w-28 truncate sm:inline">{user.name}</span>
+          </Link>
+        ) : (
+          <Link
+            href="/sign-in"
+            className="flex h-10 items-center rounded-full bg-ink px-5 text-sm font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+          >
+            Sign in
+          </Link>
+        )}
       </div>
     </header>
   );

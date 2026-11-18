@@ -7,49 +7,76 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Element {
-  FIRE
-  WATER
-  EARTH
-  DARK
-  LIGHT
-}
-
-enum Rarity {
-  COMMON
-  RARE
-  EPIC
-  LEGENDARY
-  MYTHIC
-}
-
 model Card {
-  id          String   @id @default(cuid())
-  number      Int      @unique // 图鉴编号（显示为 #001），对外稳定
-  name        String   @unique
+  id          String          @id @default(cuid())
+  number      Int             @unique
+  name        String          @unique
   description String
   element     Element
   rarity      Rarity
   attack      Int
   defense     Int
   imageUrl    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  inventory   InventoryItem[]
 
   @@index([element])
   @@index([rarity])
 }
 
+model InventoryItem {
+  id               String   @id @default(cuid())
+  userId           String
+  cardId           String
+  quantity         Int
+  reservedQuantity Int      @default(0)
+  isHidden         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  card             Card     @relation(fields: [cardId], references: [id])
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@index([userId])
+}
+
+model Wallet {
+  userId        String   @id
+  balance       Int      @default(0)
+  frozenBalance Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LedgerEntry {
+  id           String     @id @default(cuid())
+  userId       String
+  amount       Int
+  type         LedgerType
+  refType      String?
+  refId        String?
+  balanceAfter Int
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
 model User {
-  id            String    @id
+  id            String          @id
   name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String          @unique
+  emailVerified Boolean         @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  inventory     InventoryItem[]
+  ledgerEntries LedgerEntry[]
+  wallet        Wallet?
   accounts      Account[]
+  sessions      Session[]
 
   @@map("user")
 }
@@ -74,7 +101,6 @@ model Account {
   accountId             String
   providerId            String
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -84,6 +110,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("account")
@@ -99,4 +126,31 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+enum Element {
+  FIRE
+  WATER
+  EARTH
+  DARK
+  LIGHT
+}
+
+enum Rarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+}
+
+enum LedgerType {
+  SIGNUP_BONUS
+  DAILY_LOGIN
+  QUEST_REWARD
+  SALE_INCOME
+  PURCHASE
+  FEE
+  TOP_UP
+  TRADE_GOLD
 }
