@@ -60,6 +60,7 @@ model Card {
   updatedAt   DateTime        @updatedAt
   inventory   InventoryItem[]
   listings    Listing[]
+  orders      Order[]
 
   @@index([element])
   @@index([rarity])
@@ -127,9 +128,33 @@ model Listing {
   updatedAt DateTime      @updatedAt
   seller    User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   card      Card          @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  order     Order?
 
   @@index([status, cardId])
   @@index([sellerId, status])
+}
+
+// 一笔成交记录：一个挂单被买下之后产生一条，之后不再修改（只增不改）。
+// listingId 唯一：一个挂单最多只会成交一次。
+// 买家、卖家、卡牌用 Restrict：成交记录是财务凭证，不能因为删用户或删卡而连带消失。
+model Order {
+  id         String   @id @default(cuid())
+  buyerId    String
+  sellerId   String
+  listingId  String   @unique
+  cardId     String
+  quantity   Int
+  unitPrice  Int
+  totalPrice Int // quantity × unitPrice
+  fee        Int // 手续费（从卖家收入里扣）
+  createdAt  DateTime @default(now())
+  buyer      User     @relation("OrderBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller     User     @relation("OrderSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  card       Card     @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
 }
 
 // ---------------------------------------------------------------------
@@ -154,6 +179,8 @@ model User {
   wallet        Wallet?
   ledgerEntries LedgerEntry[]
   listings      Listing[]
+  ordersBought  Order[]       @relation("OrderBuyer")
+  ordersSold    Order[]       @relation("OrderSeller")
 
   @@map("user")
 }

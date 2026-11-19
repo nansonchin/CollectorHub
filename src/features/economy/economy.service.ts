@@ -2,8 +2,10 @@ import { prisma } from "@/src/lib/prisma";
 import { grantStarterPack } from "./starter-pack.service";
 import { ca } from "zod/locales";
 import { RARITIES } from "../cards/cards.schema";
+import { cache } from "react";
 
-export async function getWalletBalance(userId: string) {
+
+export async function loadWalletBalance(userId: string) {
   const find = () => {
     return prisma.wallet.findUnique({
       where: { userId },
@@ -22,6 +24,8 @@ export async function getWalletBalance(userId: string) {
     return 0;
   }
 }
+
+export const getWalletBalance = cache(loadWalletBalance);
 
 export async function getOwnedQuantities(userId: string, cardIds: string[]) {
   if (cardIds.length === 0) return new Map<string, number>();

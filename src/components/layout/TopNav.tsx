@@ -15,7 +15,7 @@ import {
 
 const NAV_ITEMS = [
   { href: "/collection", label: "Collection", icon: LayoutGrid, enabled: true },
-  { href: "/market", label: "Market", icon: Store, enabled: false },
+  { href: "/market", label: "Market", icon: Store, enabled: true },
   { href: "/inventory", label: "Inventory", icon: Backpack, enabled: true },
   { href: "/quests", label: "Quests", icon: ScrollText, enabled: false },
   { href: "/guild", label: "Guild", icon: Shield, enabled: false },

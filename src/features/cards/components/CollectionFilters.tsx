@@ -1,13 +1,14 @@
-import { Search } from "lucide-react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { ELEMENTS, RARITIES } from "../cards.schema";
-import { collectionHref } from "../cards.url";
 import { ELEMENT_META, RARITY_META } from "../cards.meta";
+import { filtersHref } from "../cards.url";
 
 type Props = {
   q?: string;
   element?: string;
   rarity?: string;
+  basePath?: string;
 };
 
 const focusRing =
@@ -56,13 +57,18 @@ function ChipRow({
   );
 }
 
-export function CollectionFilters({ q, element, rarity }: Props) {
+export function CollectionFilters({
+  q,
+  element,
+  rarity,
+  basePath = "/collection",
+}: Props) {
   const hasFilters = Boolean(q || element || rarity);
 
   return (
     <div>
       <form
-        action="/collection"
+        action={basePath}
         method="get"
         role="search"
         className="flex items-center gap-2 rounded-2xl bg-white p-2 pl-5 shadow-soft"
@@ -83,18 +89,19 @@ export function CollectionFilters({ q, element, rarity }: Props) {
           aria-label="Search"
           className={`grid size-11 shrink-0 place-items-center rounded-xl bg-gold-500 text-white ${focusRing}`}
         >
-          <Search size={18} aria-hidden /> 
+          <Search size={18} aria-hidden />
         </button>
       </form>
-        <div className="mt-5 space-y-3">
+
+      <div className="mt-5 space-y-3">
         <ChipRow label="Element">
-          <Chip href={collectionHref({ q, rarity })} active={!element}>
+          <Chip href={filtersHref(basePath, { q, rarity })} active={!element}>
             All
           </Chip>
           {ELEMENTS.map((value) => (
             <Chip
               key={value}
-              href={collectionHref({
+              href={filtersHref(basePath, {
                 q,
                 rarity,
                 //element already been selected. If select one more will be deactive
@@ -113,13 +120,13 @@ export function CollectionFilters({ q, element, rarity }: Props) {
         </ChipRow>
 
         <ChipRow label="Rarity">
-          <Chip href={collectionHref({ q, element })} active={!rarity}>
+          <Chip href={filtersHref(basePath, { q, element })} active={!rarity}>
             All
           </Chip>
           {RARITIES.map((value) => (
             <Chip
               key={value}
-              href={collectionHref({
+              href={filtersHref(basePath, {
                 q,
                 element,
                 rarity: rarity === value ? undefined : value,
@@ -133,7 +140,7 @@ export function CollectionFilters({ q, element, rarity }: Props) {
 
         {hasFilters && (
           <Link
-            href="/collection"
+            href={basePath}
             className={`inline-block text-sm font-semibold underline underline-offset-4 ${focusRing}`}
           >
             Clear filters

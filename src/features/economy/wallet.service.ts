@@ -12,10 +12,32 @@ type ApplyLedgeInput = {
   refId?: string;
 };
 
+export class InsufficientFundsError extends Error {
+  constructor() {
+    super("INSUFFICIENT_FUNDS");
+    this.name = "InsufficientFundsError";
+  }
+}
+
 export async function applyLedger(tx: Tx, input: ApplyLedgeInput) {
-  const wallet = await tx.wallet.update({
-    where: { userId: input.userId },
-    data: { balance: { increment: input.amount } },
+  const { userId, amount } = input;
+
+  if (!Number.isInteger(amount) || amount === 0) {
+    throw new Error(`Invalid ledger amount: ${amount}`);
+  }
+
+  const { count } = await tx.wallet.updateMany({
+    where: amount < 0 ? { userId, balance: { gte: -amount } } : { userId },
+    data: { balance: { increment: amount } },
+  });
+
+  if (count === 0) {
+    if (amount < 0) throw new InsufficientFundsError();
+    throw new Error(`Wallet not found for user ${userId}`);
+  }
+
+ const wallet = await tx.wallet.findUniqueOrThrow({
+    where: { userId },
     select: { balance: true },
   });
 
@@ -29,6 +51,6 @@ export async function applyLedger(tx: Tx, input: ApplyLedgeInput) {
       balanceAfter: wallet.balance,
     },
   });
-  
+
   return wallet.balance;
 }

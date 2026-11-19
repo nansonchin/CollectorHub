@@ -1,11 +1,9 @@
 import { prisma } from "@/src/lib/prisma";
 import type { ListCardsQuery } from "./cards.schema";
 
-// look from database
-
 type CardFilters = Pick<ListCardsQuery, "element" | "rarity" | "q">;
 
-function buildWhere({ element, rarity, q }: CardFilters) {
+export function buildCardWhere({ element, rarity, q }: CardFilters) {
   return {
     ...(element && { element }),
     ...(rarity && { rarity }),
@@ -15,16 +13,18 @@ function buildWhere({ element, rarity, q }: CardFilters) {
 
 export async function listCards(query: ListCardsQuery) {
   const { page, pageSize } = query;
-  const where = buildWhere(query);
+  const where = buildCardWhere(query);
 
   const [items, total] = await Promise.all([
     prisma.card.findMany({
       where,
+      orderBy: { number: "asc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
     prisma.card.count({ where }),
   ]);
+
   return {
     items,
     total,
@@ -44,11 +44,9 @@ export async function getCardDetail(
   pageSize: number,
 ) {
   const card = await getCardByNumber(number);
+  if (!card) return null;
 
-  if (!card) {
-    return null;
-  }
-  const where = buildWhere(filters);
+  const where = buildCardWhere(filters);
 
   const [indexBefore, previous, next] = await Promise.all([
     prisma.card.count({ where: { ...where, number: { lt: number } } }),

@@ -5,6 +5,9 @@ const STATUS_BY_CODE: Record<MarketErrorCode, number> = {
   NOT_ENOUGH_COPIES: 409,
   LISTING_NOT_FOUND: 404,
   LISTING_NOT_CANCELLABLE: 409,
+  LISTING_NOT_AVAILABLE: 409,
+  CANNOT_BUY_OWN_LISTING: 409,
+  INSUFFICIENT_FUNDS: 409,
 };
 
 export function marketErrorResponse(error: unknown) {

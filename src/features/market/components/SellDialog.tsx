@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { MARKET_FEE_PERCENT } from "../../economy/economy.config";
 
 type Props = {
   cardId: string;
@@ -27,6 +28,7 @@ export function SellDialog({ cardId, cardName, available }: Props) {
   const [pending, setPending] = useState(false);
 
   const total = (Number(quantity) || 0) * (Number(price) || 0);
+  const fee = Math.floor((total * MARKET_FEE_PERCENT) / 100);
 
   const open = () => {
     setError(null);
@@ -128,9 +130,13 @@ export function SellDialog({ cardId, cardName, available }: Props) {
             />
           </label>
 
-          <p className="rounded-xl bg-gold-100 px-4 py-3 text-sm font-semibold text-[#7a5a10]">
-            Listing total: {total.toLocaleString("en-US")} Gold
-          </p>
+          <div className="rounded-xl bg-gold-100 px-4 py-3 text-sm font-semibold text-[#7a5a10]">
+            <p>Listing total: {total.toLocaleString("en-US")} Gold</p>
+            <p className="mt-0.5 font-normal">
+              You receive {(total - fee).toLocaleString("en-US")} Gold after the{" "}
+              {MARKET_FEE_PERCENT}% fee.
+            </p>
+          </div>
 
           {error && (
             <p
