@@ -7,127 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-model Card {
-  id          String          @id @default(cuid())
-  number      Int             @unique
-  name        String          @unique
-  description String
-  element     Element
-  rarity      Rarity
-  attack      Int
-  defense     Int
-  imageUrl    String
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  inventory   InventoryItem[]
-
-  @@index([element])
-  @@index([rarity])
-}
-
-model InventoryItem {
-  id               String   @id @default(cuid())
-  userId           String
-  cardId           String
-  quantity         Int
-  reservedQuantity Int      @default(0)
-  isHidden         Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  card             Card     @relation(fields: [cardId], references: [id])
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, cardId])
-  @@index([userId])
-}
-
-model Wallet {
-  userId        String   @id
-  balance       Int      @default(0)
-  frozenBalance Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model LedgerEntry {
-  id           String     @id @default(cuid())
-  userId       String
-  amount       Int
-  type         LedgerType
-  refType      String?
-  refId        String?
-  balanceAfter Int
-  createdAt    DateTime   @default(now())
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-}
-
-model User {
-  id            String          @id
-  name          String
-  email         String          @unique
-  emailVerified Boolean         @default(false)
-  image         String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  inventory     InventoryItem[]
-  ledgerEntries LedgerEntry[]
-  wallet        Wallet?
-  accounts      Account[]
-  sessions      Session[]
-
-  @@map("user")
-}
-
-model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("session")
-}
-
-model Account {
-  id                    String    @id
-  accountId             String
-  providerId            String
-  userId                String
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("account")
-}
-
-model Verification {
-  id         String   @id
-  identifier String
-  value      String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([identifier])
-  @@map("verification")
-}
-
 enum Element {
   FIRE
   WATER
@@ -144,13 +23,189 @@ enum Rarity {
   MYTHIC
 }
 
+// Gold 变动的原因。每一条流水都要说明"为什么变"。
 enum LedgerType {
-  SIGNUP_BONUS
-  DAILY_LOGIN
-  QUEST_REWARD
-  SALE_INCOME
-  PURCHASE
-  FEE
-  TOP_UP
-  TRADE_GOLD
+  SIGNUP_BONUS // 注册奖励
+  DAILY_LOGIN // 每日登录奖励
+  QUEST_REWARD // 完成委托的奖励
+  SALE_INCOME // 卖卡收入
+  PURCHASE // 买卡支出
+  FEE // 交易手续费
+  TOP_UP // 模拟充值
+  TRADE_GOLD // 卡牌交换时附带的 Gold
+}
+
+// 挂单的状态机：AVAILABLE → RESERVED → SOLD，或 AVAILABLE → CANCELLED / EXPIRED。
+// 状态只能沿着允许的路径变化，每一次变化都用"条件更新"来保证。
+enum ListingStatus {
+  AVAILABLE // 在售
+  RESERVED // 被买家保留（阶段 3 实现）
+  SOLD // 已售出
+  CANCELLED // 卖家取消
+  EXPIRED // 过期（阶段 3 实现）
+}
+
+// 官方卡牌：由系统管理，玩家只读。
+model Card {
+  id          String          @id @default(cuid())
+  number      Int             @unique // 图鉴编号（显示为 #001），对外稳定
+  name        String          @unique
+  description String
+  element     Element
+  rarity      Rarity
+  attack      Int
+  defense     Int
+  imageUrl    String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  inventory   InventoryItem[]
+  listings    Listing[]
+
+  @@index([element])
+  @@index([rarity])
+}
+
+// ---------------------------------------------------------------------
+// 经济系统：玩家拥有的卡牌和 Gold
+// ---------------------------------------------------------------------
+
+// 玩家的仓库：某个玩家拥有某张卡几张。
+// 一个玩家对一张卡只有一行（userId + cardId 唯一），数量用 quantity 表示。
+model InventoryItem {
+  id               String   @id @default(cuid())
+  userId           String
+  cardId           String
+  quantity         Int // 拥有的总数
+  reservedQuantity Int      @default(0) // 被挂单/交换/委托锁住的数量；可用数量 = quantity - reservedQuantity
+  isHidden         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card             Card     @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, cardId])
+  @@index([userId])
+}
+
+// 玩家的钱包。balance 只是"流水总和"的缓存，
+// 唯一允许修改它的方式是同时写一条 LedgerEntry（见 wallet.service.ts）。
+model Wallet {
+  userId        String   @id
+  balance       Int      @default(0) // 可用 Gold
+  frozenBalance Int      @default(0) // 被委托/交换冻结的 Gold
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Gold 流水：每一次 Gold 变动都留下一行，只增不改不删。
+model LedgerEntry {
+  id           String     @id @default(cuid())
+  userId       String
+  amount       Int // 正数收入，负数支出
+  type         LedgerType
+  refType      String? // 关联的业务，例如 "Order"、"Quest"
+  refId        String? // 关联业务的 id
+  balanceAfter Int // 这次变动之后的余额，方便核对
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// 市场上的一个挂单：卖家把仓库里的 quantity 张某卡，按 unitPrice 一张出售。
+// 一个挂单是一整份：买家要买就整份买下（总价 = quantity × unitPrice）。
+// 挂单创建时，卖家仓库里对应数量会被锁住（InventoryItem.reservedQuantity 增加）。
+model Listing {
+  id        String        @id @default(cuid())
+  sellerId  String
+  cardId    String
+  quantity  Int
+  unitPrice Int // 每张的价格（Gold）
+  status    ListingStatus @default(AVAILABLE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  seller    User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  card      Card          @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([status, cardId])
+  @@index([sellerId, status])
+}
+
+// ---------------------------------------------------------------------
+// 以下四张表是 Better Auth 需要的标准结构（账号、登录状态、验证码）。
+// 字段名由这个库规定，不要改名；以后需要的自定义字段（例如 role）
+// 再通过它的 additionalFields 加进 User。
+// @@map 让数据库里的表名是小写的 user / session / account / verification。
+// ---------------------------------------------------------------------
+
+// 一个人。注意：密码不在这里，在 Account 里。
+model User {
+  id            String          @id
+  name          String
+  email         String          @unique
+  emailVerified Boolean         @default(false)
+  image         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  inventory     InventoryItem[]
+  wallet        Wallet?
+  ledgerEntries LedgerEntry[]
+  listings      Listing[]
+
+  @@map("user")
+}
+
+// 一次"已登录"的状态，每个设备/浏览器一条。
+// 浏览器的 cookie 里存的是 token，服务器用它查到这一行，就知道是谁。
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+// 一种登录方式。邮箱密码登录是 providerId = "credential" 的一行，
+// 密码（已加密）存在这里。以后加 Google 登录，就是同一个 User 多一行 Account。
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+// 一次性验证码（邮箱验证、重设密码）。现在还没用到，但库要求这张表存在。
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
 }

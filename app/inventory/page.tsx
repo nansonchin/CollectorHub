@@ -1,7 +1,10 @@
-import { RARITY_META } from "@/src/features/cards/cards.meta";
+import { formatCardNumber, RARITY_META } from "@/src/features/cards/cards.meta";
 import { collectionHref } from "@/src/features/cards/cards.url";
 import { CardTile } from "@/src/features/cards/components/CardTile";
 import { getInventoryOverview } from "@/src/features/economy/economy.service";
+import { CancelListingButton } from "@/src/features/market/components/CancelListingButton";
+import { SellDialog } from "@/src/features/market/components/SellDialog";
+import { listMyListings } from "@/src/features/market/market.service";
 import { getSession } from "@/src/lib/session";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -12,13 +15,17 @@ const focusRing =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 export default async function InventoryPage() {
-  
+
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  const { items, ownedCards, totalCards, copies, byRarity } =
-    await getInventoryOverview(session.user.id);
+  // 两个查询互不依赖，同时发出
+  const [overview, listings] = await Promise.all([
+    getInventoryOverview(session.user.id),
+    listMyListings(session.user.id),
+  ]);
 
+  const { items, ownedCards, totalCards, copies, byRarity } = overview;
   const percent = totalCards === 0 ? 0 : Math.round((ownedCards / totalCards) * 100);
 
   return (
@@ -78,23 +85,66 @@ export default async function InventoryPage() {
           </ul>
         </section>
 
+        {listings.length > 0 && (
+          <section aria-labelledby="listings-heading" className="mt-10">
+            <h2 id="listings-heading" className="font-display text-2xl font-bold">
+              Your listings
+            </h2>
+            <ul className="mt-5 space-y-3">
+              {listings.map((listing) => (
+                <li
+                  key={listing.id}
+                  className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[28px] bg-white px-6 py-4 shadow-soft"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-lg font-bold">{listing.card.name}</p>
+                    <p className="text-sm text-mute">
+                      N°{formatCardNumber(listing.card.number)} · ×{listing.quantity} at{" "}
+                      {listing.unitPrice.toLocaleString("en-US")} Gold each
+                    </p>
+                  </div>
+                  <p className="font-display text-xl font-bold">
+                    {(listing.quantity * listing.unitPrice).toLocaleString("en-US")}{" "}
+                    <span className="text-sm font-semibold text-mute">Gold</span>
+                  </p>
+                  <CancelListingButton listingId={listing.id} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <h2 className="mt-10 font-display text-2xl font-bold">Your cards</h2>
 
         {items.length > 0 ? (
           <ul className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {items.map((item) => (
-              <li key={item.id}>
-                <Link
-                  href={collectionHref({ card: item.card.number })}
-                  className={`block rounded-[28px] ${focusRing}`}
-                >
-                  <CardTile
-                    card={item.card}
-                    owned={item.quantity > 1 ? item.quantity : null}
-                  />
-                </Link>
-              </li>
-            ))}
+            {items.map((item) => {
+              const available = item.quantity - item.reservedQuantity;
+              return (
+                <li key={item.id}>
+                  <Link
+                    href={collectionHref({ card: item.card.number })}
+                    className={`block rounded-[28px] ${focusRing}`}
+                  >
+                    <CardTile
+                      card={item.card}
+                      owned={item.quantity > 1 ? item.quantity : null}
+                    />
+                  </Link>
+                  <div className="mt-3 flex items-center justify-between gap-2 px-1">
+                    <p className="text-sm text-mute">
+                      {available} available
+                      {item.reservedQuantity > 0 && ` · ${item.reservedQuantity} listed`}
+                    </p>
+                    <SellDialog
+                      cardId={item.card.id}
+                      cardName={item.card.name}
+                      available={available}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="mt-5 rounded-[28px] bg-white p-10 text-center shadow-soft">
