@@ -27,6 +27,7 @@ type Props = {
   previous: Neighbor;
   next: Neighbor;
   closeHref: string;
+  owned?:number | null;
 };
 
 const focusRing =
@@ -55,7 +56,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function CardDetailPanel({ card, previous, next, closeHref }: Props) {
+export function CardDetailPanel({ card, previous, next, closeHref, owned=null }: Props) {
   const element = ELEMENT_META[card.element];
   const rarity = RARITY_META[card.rarity];
 
@@ -117,6 +118,18 @@ export function CardDetailPanel({ card, previous, next, closeHref }: Props) {
         <Stat label="Attack" value={card.attack} />
         <Stat label="Defense" value={card.defense} />
       </div>
+
+      {owned != null && (
+        <p
+          className={`mt-5 rounded-2xl px-4 py-3 text-sm font-semibold ${
+            owned > 0 ? "bg-gold-100 text-[#7a5a10]" : "bg-paper text-mute"
+          }`}
+        >
+          {owned > 0
+            ? `You own ${owned} ${owned === 1 ? "copy" : "copies"}`
+            : "Not in your collection yet"}
+        </p>
+      )}
 
       <nav
         aria-label="Browse cards"

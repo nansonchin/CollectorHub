@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   Backpack,
   Bell,
+  Coins,
   LayoutGrid,
   ScrollText,
   Shield,
@@ -15,7 +16,7 @@ import {
 const NAV_ITEMS = [
   { href: "/collection", label: "Collection", icon: LayoutGrid, enabled: true },
   { href: "/market", label: "Market", icon: Store, enabled: false },
-  { href: "/inventory", label: "Inventory", icon: Backpack, enabled: false },
+  { href: "/inventory", label: "Inventory", icon: Backpack, enabled: true },
   { href: "/quests", label: "Quests", icon: ScrollText, enabled: false },
   { href: "/guild", label: "Guild", icon: Shield, enabled: false },
   { href: "/trade", label: "Trade", icon: ArrowLeftRight, enabled: false },
@@ -24,7 +25,7 @@ const NAV_ITEMS = [
 const itemBase =
   "flex h-11 shrink-0 items-center gap-2 border-b-[3px] px-3 text-sm font-semibold";
 
-export function TopNav({ user }: { user: { name: string } | null }) {
+export function TopNav({ user }: { user: { name: string; gold: number } | null }) {
   const pathname = usePathname();
 
   return (
@@ -78,6 +79,16 @@ export function TopNav({ user }: { user: { name: string } | null }) {
       </nav>
 
       <div className="flex shrink-0 items-center gap-1 py-3">
+        {user && (
+          <div
+            title="Your Gold"
+            className="mr-1 flex h-10 items-center gap-1.5 rounded-full bg-gold-100 px-3 text-sm font-bold text-[#7a5a10]"
+          >
+            <Coins size={16} aria-hidden />
+            <span className="sr-only">Gold:</span>
+            {user.gold.toLocaleString("en-US")}
+          </div>
+        )}
         <button
           type="button"
           disabled

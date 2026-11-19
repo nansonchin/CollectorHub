@@ -5,6 +5,8 @@ import { collectionHref } from "@/src/features/cards/cards.url";
 import { CardDetailPanel } from "@/src/features/cards/components/CardDetailPanel";
 import { CardTile } from "@/src/features/cards/components/CardTile";
 import { CollectionFilters } from "@/src/features/cards/components/CollectionFilters";
+import { getOwnedQuantities } from "@/src/features/economy/economy.service";
+import { getSession } from "@/src/lib/session";
 import Link from "next/link";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -34,6 +36,12 @@ export default async function CollectionPage({
   ]);
 
   const { items, total, page, pageSize, totalPages } = list;
+  const session = await getSession()
+  const ownedByCardId = session ? await getOwnedQuantities(session.user.id,[
+    ...items.map((card)=>card.id),
+    ...(detail?[detail.card.id]:[])
+  ]):null;
+
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
@@ -76,7 +84,7 @@ export default async function CollectionPage({
                           aria-current={selected ? "true" : undefined}
                           className={`block rounded-[28px] ${focusRing}`}
                         >
-                          <CardTile card={card} selected={selected} />
+                          <CardTile card={card} selected={selected} owned={ownedByCardId? (ownedByCardId.get(card.id)??0):null}/>
                         </Link>
                       </li>
                     );
@@ -139,6 +147,7 @@ export default async function CollectionPage({
                 }
               }
               closeHref={linkTo()}
+              owned={ownedByCardId ? (ownedByCardId.get(detail.card.id) ?? 0) : null}
             />
           ) : (
             <div className="rounded-[32px] bg-white p-6 shadow-soft">

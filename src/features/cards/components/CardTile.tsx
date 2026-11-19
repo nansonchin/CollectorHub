@@ -16,12 +16,13 @@ type Props = {
     imageUrl: string;
   };
   selected?: boolean; 
+  owned?:number|null;
 };
 
-export function CardTile({ card, selected = false }: Props) {
+export function CardTile({ card, selected = false,owned=null }: Props) {
   const element = ELEMENT_META[card.element];
   const rarity = RARITY_META[card.rarity];
-
+const locked = owned === 0;
   return (
     <article
       className={`overflow-hidden rounded-[28px] bg-white shadow-soft ${
@@ -48,6 +49,12 @@ export function CardTile({ card, selected = false }: Props) {
         </div>
       </div>
 
+        {owned != null && owned > 0 && (
+          <span className="absolute left-3 top-3 rounded-full bg-ink px-2.5 py-1 text-xs font-bold text-white">
+            {owned === 1 ? "Owned" : `Owned ×${owned}`}
+          </span>
+        )}
+
       <div className="px-5 pb-5 pt-4">
         <p className="text-xs font-semibold text-mute">N°{formatCardNumber(card.number)}</p>
         <h3 className="mt-0.5 font-display text-lg font-bold leading-tight">
@@ -63,6 +70,7 @@ export function CardTile({ card, selected = false }: Props) {
 
           <span className="flex items-center gap-1" title={rarity.label}>
             <span className="sr-only">Rarity: {rarity.label}</span>
+            {locked && <span className="sr-only">Not owned</span>}
             {Array.from({ length: 5 }, (_, i) => (
               <i
                 key={i}
