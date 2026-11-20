@@ -64,6 +64,33 @@ async function main() {
     if (!inventoryKeys.has(key)) problems.push(`Open listing without inventory row: ${key}`);
   }
 
+  // 3. 保留和挂单的状态必须一一对应：
+  //    每个 RESERVED 的挂单恰好有一条 ACTIVE 的保留；
+  //    每条 ACTIVE 的保留，它的挂单一定是 RESERVED。
+  //    （超时但还没被清理的保留仍然是 ACTIVE + RESERVED，这是合法的中间状态。）
+  const [reservedListings, orphanReservations] = await Promise.all([
+    prisma.listing.findMany({
+      where: { status: "RESERVED" },
+      select: { id: true, reservations: { where: { status: "ACTIVE" }, select: { id: true } } },
+    }),
+    prisma.reservation.findMany({
+      where: { status: "ACTIVE", listing: { status: { not: "RESERVED" } } },
+      select: { id: true, listingId: true },
+    }),
+  ]);
+  for (const listing of reservedListings) {
+    if (listing.reservations.length !== 1) {
+      problems.push(
+        `Listing ${listing.id} is RESERVED but has ${listing.reservations.length} active reservations`,
+      );
+    }
+  }
+  for (const reservation of orphanReservations) {
+    problems.push(
+      `Reservation ${reservation.id} is ACTIVE but listing ${reservation.listingId} is not RESERVED`,
+    );
+  }
+
   console.log(
     `Checked ${wallets.length} wallets, ${inventory.length} inventory rows, ${openListings.length} open listing groups.`,
   );
