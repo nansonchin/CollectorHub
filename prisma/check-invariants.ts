@@ -91,6 +91,28 @@ async function main() {
     );
   }
 
+  // 4. 付款和流水必须一一对应：
+  //    每笔 SUCCEEDED 的付款恰好有一条 TOP_UP 流水（refId 是付款 id）；
+  //    没成功的付款（PENDING / FAILED）一条都不能有。
+  //    这条验证了"幂等"：同一次结账无论请求发了几遍，Gold 只入账一次。
+  const [payments, topUps] = await Promise.all([
+    prisma.payment.findMany({ select: { id: true, status: true } }),
+    prisma.ledgerEntry.findMany({ where: { type: "TOP_UP" }, select: { refId: true } }),
+  ]);
+  const topUpCount = new Map<string, number>();
+  for (const entry of topUps) {
+    if (entry.refId) topUpCount.set(entry.refId, (topUpCount.get(entry.refId) ?? 0) + 1);
+  }
+  for (const payment of payments) {
+    const expected = payment.status === "SUCCEEDED" ? 1 : 0;
+    const actual = topUpCount.get(payment.id) ?? 0;
+    if (actual !== expected) {
+      problems.push(
+        `Payment ${payment.id} is ${payment.status} but has ${actual} TOP_UP ledger entries (expected ${expected})`,
+      );
+    }
+  }
+
   console.log(
     `Checked ${wallets.length} wallets, ${inventory.length} inventory rows, ${openListings.length} open listing groups.`,
   );

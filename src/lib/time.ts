@@ -14,3 +14,4 @@ export function formatTimeLeft(until: Date, now: Date = new Date()) {
 
   return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
+
