@@ -1,11 +1,21 @@
 import { formatCardNumber, RARITY_META } from "@/src/features/cards/cards.meta";
 import { collectionHref } from "@/src/features/cards/cards.url";
 import { CardTile } from "@/src/features/cards/components/CardTile";
-import { getInventoryOverview } from "@/src/features/economy/economy.service";
+import {
+  getInventoryOverview,
+  getWalletBalance,
+} from "@/src/features/economy/economy.service";
+import { BuyDialog } from "@/src/features/market/components/BuyDialog";
 import { CancelListingButton } from "@/src/features/market/components/CancelListingButton";
+import { ReleaseButton } from "@/src/features/market/components/ReleaseButton";
 import { SellDialog } from "@/src/features/market/components/SellDialog";
-import { listMyListings } from "@/src/features/market/market.service";
+import {
+  listMyListings,
+  listMyReservations,
+  tryExpireStaleReservation,
+} from "@/src/features/market/market.service";
 import { getSession } from "@/src/lib/session";
+import { formatTimeLeft } from "@/src/lib/time";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -15,18 +25,20 @@ const focusRing =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 export default async function InventoryPage() {
-
   const session = await getSession();
   if (!session) redirect("/sign-in");
+  await tryExpireStaleReservation();
 
-  // 两个查询互不依赖，同时发出
-  const [overview, listings] = await Promise.all([
+  const [overview, listings, reservations, balance] = await Promise.all([
     getInventoryOverview(session.user.id),
     listMyListings(session.user.id),
+    listMyReservations(session.user.id),
+    getWalletBalance(session.user.id),
   ]);
 
   const { items, ownedCards, totalCards, copies, byRarity } = overview;
-  const percent = totalCards === 0 ? 0 : Math.round((ownedCards / totalCards) * 100);
+  const percent =
+    totalCards === 0 ? 0 : Math.round((ownedCards / totalCards) * 100);
 
   return (
     <div className="relative overflow-x-clip">
@@ -41,7 +53,8 @@ export default async function InventoryPage() {
         <header className="mb-6">
           <h1 className="font-display text-4xl font-extrabold">Inventory</h1>
           <p className="mt-1 text-mute">
-            {copies} {copies === 1 ? "card" : "cards"} in total, {ownedCards} different
+            {copies} {copies === 1 ? "card" : "cards"} in total, {ownedCards}{" "}
+            different
           </p>
         </header>
 
@@ -85,9 +98,65 @@ export default async function InventoryPage() {
           </ul>
         </section>
 
+        {reservations.length > 0 && (
+          <section aria-labelledby="reservations-heading" className="mt-10">
+            <h2
+              id="reservations-heading"
+              className="font-display text-2xl font-bold"
+            >
+              Your reservations
+            </h2>
+            <ul className="mt-5 space-y-3">
+              {reservations.map((reservation) => {
+                const { listing } = reservation;
+                const total = listing.quantity * listing.unitPrice;
+                return (
+                  <li
+                    key={reservation.id}
+                    className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[28px] bg-white px-6 py-4 shadow-soft"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-lg font-bold">
+                        {listing.card.name}
+                      </p>
+                      <p className="text-sm text-mute">
+                        N°{formatCardNumber(listing.card.number)}
+                        {listing.quantity > 1 && ` · ×${listing.quantity}`} · by{" "}
+                        {listing.seller.name}
+                      </p>
+                      <p className="mt-0.5 text-sm font-semibold text-[#7a5a10]">
+                        {formatTimeLeft(reservation.expiresAt)} left
+                      </p>
+                    </div>
+                    <p className="font-display text-xl font-bold">
+                      {total.toLocaleString("en-US")}{" "}
+                      <span className="text-sm font-semibold text-mute">
+                        Gold
+                      </span>
+                    </p>
+                    <div className="grid w-52 grid-cols-2 gap-2">
+                      <BuyDialog
+                        listingId={listing.id}
+                        cardName={listing.card.name}
+                        quantity={listing.quantity}
+                        total={total}
+                        balance={balance}
+                      />
+                      <ReleaseButton reservationId={reservation.id} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
         {listings.length > 0 && (
           <section aria-labelledby="listings-heading" className="mt-10">
-            <h2 id="listings-heading" className="font-display text-2xl font-bold">
+            <h2
+              id="listings-heading"
+              className="font-display text-2xl font-bold"
+            >
               Your listings
             </h2>
             <ul className="mt-5 space-y-3">
@@ -97,17 +166,32 @@ export default async function InventoryPage() {
                   className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[28px] bg-white px-6 py-4 shadow-soft"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-display text-lg font-bold">{listing.card.name}</p>
+                    <p className="font-display text-lg font-bold">
+                      {listing.card.name}
+                    </p>
                     <p className="text-sm text-mute">
-                      N°{formatCardNumber(listing.card.number)} · ×{listing.quantity} at{" "}
+                      N°{formatCardNumber(listing.card.number)} · ×
+                      {listing.quantity} at{" "}
                       {listing.unitPrice.toLocaleString("en-US")} Gold each
                     </p>
                   </div>
                   <p className="font-display text-xl font-bold">
-                    {(listing.quantity * listing.unitPrice).toLocaleString("en-US")}{" "}
-                    <span className="text-sm font-semibold text-mute">Gold</span>
+                    {(listing.quantity * listing.unitPrice).toLocaleString(
+                      "en-US",
+                    )}{" "}
+                    <span className="text-sm font-semibold text-mute">
+                      Gold
+                    </span>
                   </p>
-                  <CancelListingButton listingId={listing.id} />
+                  {listing.status === "AVAILABLE" ? (
+                    <CancelListingButton listingId={listing.id} />
+                  ) : (
+                    <p className="text-sm font-semibold text-[#7a5a10]">
+                      Reserved
+                      {listing.reservations[0] &&
+                        ` · ${formatTimeLeft(listing.reservations[0].expiresAt)} left`}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -134,7 +218,8 @@ export default async function InventoryPage() {
                   <div className="mt-3 flex items-center justify-between gap-2 px-1">
                     <p className="text-sm text-mute">
                       {available} available
-                      {item.reservedQuantity > 0 && ` · ${item.reservedQuantity} listed`}
+                      {item.reservedQuantity > 0 &&
+                        ` · ${item.reservedQuantity} listed`}
                     </p>
                     <SellDialog
                       cardId={item.card.id}
@@ -148,7 +233,9 @@ export default async function InventoryPage() {
           </ul>
         ) : (
           <div className="mt-5 rounded-[28px] bg-white p-10 text-center shadow-soft">
-            <h3 className="font-display text-xl font-bold">Your inventory is empty</h3>
+            <h3 className="font-display text-xl font-bold">
+              Your inventory is empty
+            </h3>
             <p className="mt-1 text-mute">
               Browse the collection to see which cards are out there.
             </p>

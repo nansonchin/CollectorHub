@@ -1,12 +1,21 @@
 import { Pagination } from "@/src/components/ui/Pagination";
-import { listCardsQuerySchema, parseListCardsQuery } from "@/src/features/cards/cards.schema";
+import {
+  listCardsQuerySchema,
+  parseListCardsQuery,
+} from "@/src/features/cards/cards.schema";
 import { marketHref } from "@/src/features/cards/cards.url";
 import { CardTile } from "@/src/features/cards/components/CardTile";
 import { CollectionFilters } from "@/src/features/cards/components/CollectionFilters";
 import { getWalletBalance } from "@/src/features/economy/economy.service";
 import { BuyDialog } from "@/src/features/market/components/BuyDialog";
-import { listMarketListings } from "@/src/features/market/market.service";
+import { ReleaseButton } from "@/src/features/market/components/ReleaseButton";
+import { ReserveButton } from "@/src/features/market/components/ReserveButton";
+import {
+  listMarketListings,
+  tryExpireStaleReservation,
+} from "@/src/features/market/market.service";
 import { getSession } from "@/src/lib/session";
+import { formatTimeLeft } from "@/src/lib/time";
 import Link from "next/link";
 
 export const metadata = { title: "Market · CollectorHub" };
@@ -25,6 +34,7 @@ export default async function MarketPage({
   const query = parsed.success ? parsed.data : listCardsQuerySchema.parse({});
   const { q, element, rarity } = query;
 
+  await tryExpireStaleReservation();
   const session = await getSession();
 
   const [list, balance] = await Promise.all([
@@ -55,7 +65,12 @@ export default async function MarketPage({
           </p>
         </header>
 
-        <CollectionFilters q={q} element={element} rarity={rarity} basePath="/market" />
+        <CollectionFilters
+          q={q}
+          element={element}
+          rarity={rarity}
+          basePath="/market"
+        />
 
         <div className="mt-8">
           {items.length > 0 ? (
@@ -65,6 +80,70 @@ export default async function MarketPage({
                   const total = listing.quantity * listing.unitPrice;
                   const isMine = session?.user.id === listing.sellerId;
 
+                  const reservation = listing.reservations[0];
+                  const reservedByMe =
+                    reservation !== undefined &&
+                    reservation.buyerId === session?.user.id;
+
+                  let action: React.ReactNode;
+
+                  if (isMine) {
+                    action = (
+                      <p className="flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold text-mute">
+                        {reservation
+                          ? "Your listing · reserved"
+                          : "Your listing"}
+                      </p>
+                    );
+                  } else if (!session || balance === null) {
+                    action = (
+                      <Link
+                        href="/sign-in"
+                        className={`flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold hover:bg-gold-100 ${focusRing}`}
+                      >
+                        Sign in to buy
+                      </Link>
+                    );
+                  } else if (reservation && reservedByMe) {
+                    action = (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-[#7a5a10]">
+                          Reserved for you ·{" "}
+                          {formatTimeLeft(reservation.expiresAt)} left
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <BuyDialog
+                            listingId={listing.id}
+                            cardName={listing.card.name}
+                            quantity={listing.quantity}
+                            total={total}
+                            balance={balance}
+                          />
+                          <ReleaseButton reservationId={reservation.id} />
+                        </div>
+                      </div>
+                    );
+                  } else if (reservation) {
+                    action = (
+                      <p className="flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold text-mute">
+                        Reserved · {formatTimeLeft(reservation.expiresAt)} left
+                      </p>
+                    );
+                  } else {
+                    action = (
+                      <div className="grid grid-cols-2 gap-2">
+                        <ReserveButton listingId={listing.id} />
+                        <BuyDialog
+                          listingId={listing.id}
+                          cardName={listing.card.name}
+                          quantity={listing.quantity}
+                          total={total}
+                          balance={balance}
+                        />
+                      </div>
+                    );
+                  }
+
                   return (
                     <li key={listing.id}>
                       <CardTile card={listing.card} />
@@ -73,10 +152,14 @@ export default async function MarketPage({
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-display text-xl font-bold">
                             {total.toLocaleString("en-US")}{" "}
-                            <span className="text-sm font-semibold text-mute">Gold</span>
+                            <span className="text-sm font-semibold text-mute">
+                              Gold
+                            </span>
                           </p>
                           {listing.quantity > 1 && (
-                            <p className="text-sm font-semibold">×{listing.quantity}</p>
+                            <p className="text-sm font-semibold">
+                              ×{listing.quantity}
+                            </p>
                           )}
                         </div>
                         <p className="mt-0.5 truncate text-xs text-mute">
@@ -85,28 +168,7 @@ export default async function MarketPage({
                           by {listing.seller.name}
                         </p>
 
-                        <div className="mt-3">
-                          {isMine ? (
-                            <p className="flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold text-mute">
-                              Your listing
-                            </p>
-                          ) : session && balance !== null ? (
-                            <BuyDialog
-                              listingId={listing.id}
-                              cardName={listing.card.name}
-                              quantity={listing.quantity}
-                              total={total}
-                              balance={balance}
-                            />
-                          ) : (
-                            <Link
-                              href="/sign-in"
-                              className={`flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold hover:bg-gold-100 ${focusRing}`}
-                            >
-                              Sign in to buy
-                            </Link>
-                          )}
-                        </div>
+                        <div className="mt-3">{action}</div>
                       </div>
                     </li>
                   );
@@ -124,7 +186,9 @@ export default async function MarketPage({
           ) : (
             <div className="rounded-[28px] bg-white p-10 text-center shadow-soft">
               <h2 className="font-display text-xl font-bold">
-                {total === 0 ? "Nothing for sale here" : "That page doesn't exist"}
+                {total === 0
+                  ? "Nothing for sale here"
+                  : "That page doesn't exist"}
               </h2>
               <p className="mt-1 text-mute">
                 {total === 0
@@ -132,7 +196,9 @@ export default async function MarketPage({
                   : `This list only has ${totalPages} ${totalPages === 1 ? "page" : "pages"}.`}
               </p>
               <Link
-                href={total === 0 ? "/market" : marketHref({ q, element, rarity })}
+                href={
+                  total === 0 ? "/market" : marketHref({ q, element, rarity })
+                }
                 className={`mt-5 inline-flex h-11 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white ${focusRing}`}
               >
                 {total === 0 ? "Clear filters" : "Go to page 1"}

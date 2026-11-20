@@ -1,0 +1,2 @@
+export const RESERVATION_HOURS = 24;
+export const MAX_ACTIVE_RESERVATIONS = 3;

@@ -39,10 +39,19 @@ enum LedgerType {
 // 状态只能沿着允许的路径变化，每一次变化都用"条件更新"来保证。
 enum ListingStatus {
   AVAILABLE // 在售
-  RESERVED // 被买家保留（阶段 3 实现）
+  RESERVED // 被买家保留：保留期内只有保留者能买
   SOLD // 已售出
   CANCELLED // 卖家取消
-  EXPIRED // 过期（阶段 3 实现）
+  EXPIRED // 挂单本身过期（暂未使用）
+}
+
+// 保留的状态机：ACTIVE → PURCHASED（买下了），或 ACTIVE → EXPIRED（超时）/ CANCELLED（买家主动放弃）。
+// 后三种都是终点，状态不会再变。
+enum ReservationStatus {
+  ACTIVE
+  PURCHASED
+  EXPIRED
+  CANCELLED
 }
 
 // 官方卡牌：由系统管理，玩家只读。
@@ -129,9 +138,29 @@ model Listing {
   seller    User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   card      Card          @relation(fields: [cardId], references: [id], onDelete: Restrict)
   order     Order?
+  reservations Reservation[]
 
   @@index([status, cardId])
   @@index([sellerId, status])
+}
+
+// 保留：买家在 expiresAt 之前独占一个挂单，别人不能买。
+// 保留不冻结 Gold（买家可以保留之后再赚够钱）；防止滥用靠"同时最多保留几个"的上限。
+// 保留一个挂单时，挂单的状态同时从 AVAILABLE 变成 RESERVED（见 market.service.ts）。
+model Reservation {
+  id        String            @id @default(cuid())
+  listingId String
+  buyerId   String
+  status    ReservationStatus @default(ACTIVE)
+  expiresAt DateTime
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  listing   Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer     User              @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, status])
+  @@index([buyerId, status])
+  @@index([status, expiresAt]) // 过期扫描："找出所有已经超时的 ACTIVE 保留"
 }
 
 // 一笔成交记录：一个挂单被买下之后产生一条，之后不再修改（只增不改）。
@@ -181,6 +210,7 @@ model User {
   listings      Listing[]
   ordersBought  Order[]       @relation("OrderBuyer")
   ordersSold    Order[]       @relation("OrderSeller")
+  reservations  Reservation[]
 
   @@map("user")
 }

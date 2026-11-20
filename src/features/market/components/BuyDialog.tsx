@@ -13,6 +13,7 @@ type Props = {
 
 const ERROR_MESSAGES: Record<string, string> = {
   LISTING_NOT_AVAILABLE: "Someone else just bought this listing, or it was cancelled.",
+  LISTING_RESERVED: "This listing is reserved by another buyer.",
   LISTING_NOT_FOUND: "This listing no longer exists.",
   CANNOT_BUY_OWN_LISTING: "You can't buy your own listing.",
   INSUFFICIENT_FUNDS: "You don't have enough Gold.",

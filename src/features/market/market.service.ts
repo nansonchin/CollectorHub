@@ -1,17 +1,26 @@
 import { prisma } from "@/src/lib/prisma";
 import { CreateListingInput } from "./market.schema";
 import { MARKET_FEE_PERCENT } from "../economy/economy.config";
-import { applyLedger, InsufficientFundsError } from "../economy/wallet.service";
+import {
+  applyLedger,
+  InsufficientFundsError,
+  Tx,
+} from "../economy/wallet.service";
 import { ListCardsQuery } from "../cards/cards.schema";
 import { buildCardWhere } from "../cards/cards.service";
+import { MAX_ACTIVE_RESERVATIONS, RESERVATION_HOURS } from "./market.config";
 
 export type MarketErrorCode =
   | "NOT_ENOUGH_COPIES"
   | "LISTING_NOT_FOUND"
   | "LISTING_NOT_CANCELLABLE"
   | "LISTING_NOT_AVAILABLE"
+  | "LISTING_RESERVED"
   | "CANNOT_BUY_OWN_LISTING"
-  | "INSUFFICIENT_FUNDS";
+  | "INSUFFICIENT_FUNDS"
+  | "RESERVATION_LIMIT"
+  | "RESERVATION_NOT_FOUND"
+  | "RESERVATION_NOT_CANCELLABLE";
 
 export class MarketError extends Error {
   constructor(public readonly code: MarketErrorCode) {
@@ -49,6 +58,7 @@ export async function cancelListing(sellerId: string, listingId: string) {
     });
 
     if (!listing) throw new MarketError("LISTING_NOT_FOUND");
+
     const { count } = await tx.listing.updateMany({
       where: { id: listingId, status: "AVAILABLE" },
       data: { status: "CANCELLED" },
@@ -65,13 +75,122 @@ export async function cancelListing(sellerId: string, listingId: string) {
   });
 }
 
-export async function listMyListings(sellerId: string) {
-  return prisma.listing.findMany({
-    where: { sellerId, status: "AVAILABLE" },
-    include: { card: true },
-    orderBy: { createdAt: "desc" },
+async function expireReservations(tx: Tx, scope: { listingId?: string } = {}) {
+  const now = new Date();
+
+  const stale = await tx.reservation.findMany({
+    where: {
+      status: "ACTIVE",
+      expiresAt: { lte: now },
+      ...(scope.listingId && { listingId: scope.listingId }),
+    },
+    select: { id: true, listingId: true },
+    orderBy: { id: "asc" },
+  });
+
+  let expired = 0;
+  for (const reservation of stale) {
+    const { count } = await tx.reservation.updateMany({
+      where: { id: reservation.id, status: "ACTIVE", expiresAt: { lte: now } },
+      data: { status: "EXPIRED" },
+    });
+
+    if (count === 1) {
+      await tx.listing.updateMany({
+        where: { id: reservation.listingId, status: "RESERVED" },
+        data: { status: "AVAILABLE" },
+      });
+      expired += 1;
+    }
+  }
+
+  return expired;
+}
+
+export async function expireStaleReservations() {
+  return prisma.$transaction((tx) => expireReservations(tx));
+}
+
+export async function tryExpireStaleReservation() {
+  try {
+    await expireStaleReservations();
+  } catch (error) {
+    console.error("Lazy reservation expiry failed:", error);
+  }
+}
+
+export async function reserveListing(buyerId: string, listingId: string) {
+  return prisma.$transaction(async (tx) => {
+    const listing = await tx.listing.findUnique({ where: { id: listingId } });
+    if (!listing) {
+      throw new MarketError("LISTING_NOT_FOUND");
+    }
+    if (listing.sellerId === buyerId) {
+      throw new MarketError("CANNOT_BUY_OWN_LISTING");
+    }
+
+    await expireReservations(tx, { listingId });
+    const activeCount = await tx.reservation.count({
+      where: { buyerId, status: "ACTIVE" },
+    });
+
+    if (activeCount >= MAX_ACTIVE_RESERVATIONS) {
+      throw new MarketError("RESERVATION_LIMIT");
+    }
+
+    const claimed = await tx.listing.updateMany({
+      where: { id: listingId, status: "AVAILABLE" },
+      data: { status: "RESERVED" },
+    });
+
+    if (claimed.count === 0) {
+      const current = await tx.listing.findUnique({
+        where: { id: listingId },
+        select: { status: true },
+      });
+      throw new MarketError(
+        current?.status === "RESERVED"
+          ? "LISTING_RESERVED"
+          : "LISTING_NOT_AVAILABLE",
+      );
+    }
+
+    return tx.reservation.create({
+      data: {
+        listingId,
+        buyerId,
+        expiresAt: new Date(Date.now() + RESERVATION_HOURS * 60 * 60 * 1000),
+      },
+    });
   });
 }
+export async function cancelReservation(
+  buyerId: string,
+  reservationId: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const reservation = await tx.reservation.findFirst({
+      where: {
+        id: reservationId,
+        buyerId,
+      },
+    });
+    if (!reservation) throw new MarketError("RESERVATION_NOT_FOUND");
+    const { count } = await tx.reservation.updateMany({
+      where: { id: reservationId, status: "ACTIVE" },
+      data: { status: "CANCELLED" },
+    });
+    if (count === 0) throw new MarketError("RESERVATION_NOT_CANCELLABLE");
+
+    await tx.listing.updateMany({
+      where: { id: reservation.listingId, status: "RESERVED" },
+      data: { status: "AVAILABLE" },
+    });
+
+    return { id: reservation.id };
+  });
+}
+
 export async function purchaseListing(buyerId: string, listingId: string) {
   return prisma.$transaction(async (tx) => {
     const listing = await tx.listing.findUnique({ where: { id: listingId } });
@@ -79,6 +198,7 @@ export async function purchaseListing(buyerId: string, listingId: string) {
     if (listing.sellerId === buyerId)
       throw new MarketError("CANNOT_BUY_OWN_LISTING");
 
+    //locked
     await tx.$queryRaw`
       SELECT "userId" FROM "Wallet"
       WHERE "userId" IN (${buyerId}, ${listing.sellerId})
@@ -86,8 +206,33 @@ export async function purchaseListing(buyerId: string, listingId: string) {
       FOR UPDATE
     `;
 
+    await expireReservations(tx, { listingId });
+
+    const reservation = await tx.reservation.findFirst({
+      where: {
+        listingId,
+        status: "ACTIVE",
+      },
+    });
+
+    if (reservation && reservation.buyerId !== buyerId) {
+      throw new MarketError("LISTING_RESERVED");
+    }
+
+    if (reservation) {
+      const used = await tx.reservation.updateMany({
+        where: {
+          id: reservation.id,
+          status: "ACTIVE",
+          expiresAt: { gt: new Date() },
+        },
+        data: { status: "PURCHASED" },
+      });
+      if (used.count === 0) throw new MarketError("LISTING_NOT_AVAILABLE");
+    }
+
     const claimed = await tx.listing.updateMany({
-      where: { id: listingId, status: "AVAILABLE" },
+      where: { id: listingId, status: reservation ? "RESERVED" : "AVAILABLE" },
       data: { status: "SOLD" },
     });
     if (claimed.count === 0) throw new MarketError("LISTING_NOT_AVAILABLE");
@@ -162,19 +307,50 @@ export async function purchaseListing(buyerId: string, listingId: string) {
   });
 }
 
+export async function listMyListings(sellerId: string) {
+  return prisma.listing.findMany({
+    where: { sellerId, status: { in: ["AVAILABLE", "RESERVED"] } },
+    include: {
+      card: true,
+      reservations: {
+        where: { status: "ACTIVE" },
+        select: { expiresAt: true },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+export async function listMyReservations(buyerId: string) {
+  return prisma.reservation.findMany({
+    where: { buyerId, status: "ACTIVE" },
+    include: {
+      listing: {
+        include: { card: true, seller: { select: { id: true, name: true } } },
+      },
+    },
+    orderBy: { expiresAt: "asc" },
+  });
+}
+
 export async function listMarketListings(query: ListCardsQuery) {
   const { page, pageSize } = query;
   const where = {
-    status: "AVAILABLE" as const,
+    status: { in: ["AVAILABLE", "RESERVED"] as ("AVAILABLE" | "RESERVED")[] },
     card: buildCardWhere(query),
   };
 
   const [items, total] = await Promise.all([
-    prisma.listing.findMany({
+       prisma.listing.findMany({
       where,
       include: {
         card: true,
         seller: { select: { id: true, name: true } },
+        reservations: {
+          where: { status: "ACTIVE" },
+          select: { id: true, buyerId: true, expiresAt: true },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
