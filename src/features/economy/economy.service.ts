@@ -68,3 +68,11 @@ export async function getInventoryOverview(userId: string) {
     byRarity,
   };
 }
+
+export async function listRecentLedger(userId:string,take=20){
+  return prisma.ledgerEntry.findMany({
+    where:{userId},
+    orderBy:{createdAt:"desc"},
+    take
+  })
+}

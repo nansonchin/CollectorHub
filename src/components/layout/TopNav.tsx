@@ -80,14 +80,15 @@ export function TopNav({ user }: { user: { name: string; gold: number } | null }
 
       <div className="flex shrink-0 items-center gap-1 py-3">
         {user && (
-          <div
-            title="Your Gold"
-            className="mr-1 flex h-10 items-center gap-1.5 rounded-full bg-gold-100 px-3 text-sm font-bold text-[#7a5a10]"
+          <Link
+            href="/wallet"
+            title="Wallet"
+            className="mr-1 flex h-10 items-center gap-1.5 rounded-full bg-gold-100 px-3 text-sm font-bold text-[#7a5a10] hover:bg-gold-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
           >
             <Coins size={16} aria-hidden />
             <span className="sr-only">Gold:</span>
             {user.gold.toLocaleString("en-US")}
-          </div>
+          </Link>
         )}
         <button
           type="button"

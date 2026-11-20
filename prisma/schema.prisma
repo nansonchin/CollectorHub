@@ -54,6 +54,13 @@ enum ReservationStatus {
   CANCELLED
 }
 
+// 付款的状态机：PENDING → SUCCEEDED 或 FAILED，两个终点之后不再变。
+enum PaymentStatus {
+  PENDING // 已记录、正在向支付服务商扣款
+  SUCCEEDED // 扣款成功，Gold 已入账
+  FAILED // 扣款失败，没有入账
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -163,6 +170,30 @@ model Reservation {
   @@index([status, expiresAt]) // 过期扫描："找出所有已经超时的 ACTIVE 保留"
 }
 
+// 一次充值付款。
+// 关键字段 idempotencyKey（幂等键）：客户端每次"结账"生成一个随机 id 一起发来。
+// (userId, idempotencyKey) 唯一，所以同一次结账不管请求被发送多少遍
+// （连点两次、网络超时后重试），数据库里都只会有一条付款，也就只会扣一次款、加一次 Gold。
+// gold 和 amountCents 是下单那一刻的"快照"：以后调整商品价格，不影响历史记录。
+model Payment {
+  id                    String        @id @default(cuid())
+  userId                String
+  idempotencyKey        String
+  packId                String
+  gold                  Int
+  amountCents           Int
+  currency              String        @default("USD")
+  status                PaymentStatus @default(PENDING)
+  providerTransactionId String? // 支付服务商那边的交易号
+  failureReason         String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+}
+
 // 一笔成交记录：一个挂单被买下之后产生一条，之后不再修改（只增不改）。
 // listingId 唯一：一个挂单最多只会成交一次。
 // 买家、卖家、卡牌用 Restrict：成交记录是财务凭证，不能因为删用户或删卡而连带消失。
@@ -211,6 +242,7 @@ model User {
   ordersBought  Order[]       @relation("OrderBuyer")
   ordersSold    Order[]       @relation("OrderSeller")
   reservations  Reservation[]
+  payments      Payment[]
 
   @@map("user")
 }
