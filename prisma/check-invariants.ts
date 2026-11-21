@@ -113,6 +113,30 @@ async function main() {
     }
   }
 
+  // 5. 评价必须合理：
+  //    评价者和被评的人恰好是那笔订单的买家和卖家（一个评另一个），不能是同一个人；
+  //    分数在 1 到 5 之间。
+  //    （同一个人对同一订单只能评一次，由数据库的唯一约束保证。）
+  const reviews = await prisma.review.findMany({
+    select: {
+      id: true,
+      rating: true,
+      reviewerId: true,
+      targetId: true,
+      order: { select: { buyerId: true, sellerId: true } },
+    },
+  });
+  for (const review of reviews) {
+    const { buyerId, sellerId } = review.order;
+    const validPair =
+      (review.reviewerId === buyerId && review.targetId === sellerId) ||
+      (review.reviewerId === sellerId && review.targetId === buyerId);
+    if (!validPair) problems.push(`Review ${review.id}: reviewer/target do not match its order`);
+    if (review.rating < 1 || review.rating > 5) {
+      problems.push(`Review ${review.id}: rating ${review.rating} out of range`);
+    }
+  }
+
   console.log(
     `Checked ${wallets.length} wallets, ${inventory.length} inventory rows, ${openListings.length} open listing groups.`,
   );

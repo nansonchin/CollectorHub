@@ -61,6 +61,13 @@ enum PaymentStatus {
   FAILED // 扣款失败，没有入账
 }
 
+// 评价时可以选的标签（最多 3 个）。
+enum ReviewTag {
+  FAST_TRADER
+  GOOD_COMMUNICATION
+  FAIR_PRICE
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -212,9 +219,33 @@ model Order {
   seller     User     @relation("OrderSeller", fields: [sellerId], references: [id], onDelete: Restrict)
   listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Restrict)
   card       Card     @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  reviews    Review[]
 
   @@index([buyerId, createdAt])
   @@index([sellerId, createdAt])
+}
+
+// 评价：一笔成交之后，买卖双方各自可以给对方评一次。
+// (orderId, reviewerId) 唯一：同一个人对同一笔订单只能评一次，由数据库保证，
+// 不靠"前端把按钮藏起来"。
+// targetId（被评的人）不由客户端传，服务器根据订单推出来：
+// 评价者是买家，被评的就是卖家；反之亦然。这样没人能给不相干的人刷好评或差评。
+// 评价是信誉凭证，所以关联用 Restrict，不会因为删用户而连带消失。
+model Review {
+  id         String      @id @default(cuid())
+  orderId    String
+  reviewerId String
+  targetId   String
+  rating     Int // 1 到 5 星
+  tags       ReviewTag[]
+  comment    String?
+  createdAt  DateTime    @default(now())
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reviewer   User        @relation("ReviewWriter", fields: [reviewerId], references: [id], onDelete: Restrict)
+  target     User        @relation("ReviewTarget", fields: [targetId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, reviewerId])
+  @@index([targetId, createdAt]) // 查"某个人收到的评价"和算平均分
 }
 
 // ---------------------------------------------------------------------
@@ -243,6 +274,8 @@ model User {
   ordersSold    Order[]       @relation("OrderSeller")
   reservations  Reservation[]
   payments      Payment[]
+  reviewsWritten  Review[]    @relation("ReviewWriter")
+  reviewsReceived Review[]    @relation("ReviewTarget")
 
   @@map("user")
 }

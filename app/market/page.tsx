@@ -148,24 +148,34 @@ export default async function MarketPage({
                     <li key={listing.id}>
                       <CardTile card={listing.card} />
 
-                      <div className="mt-3 px-1">
+                       <div className="mt-3 px-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-display text-xl font-bold">
                             {total.toLocaleString("en-US")}{" "}
-                            <span className="text-sm font-semibold text-mute">
-                              Gold
-                            </span>
+                            <span className="text-sm font-semibold text-mute">Gold</span>
                           </p>
                           {listing.quantity > 1 && (
-                            <p className="text-sm font-semibold">
-                              ×{listing.quantity}
-                            </p>
+                            <p className="text-sm font-semibold">×{listing.quantity}</p>
                           )}
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-mute">
-                          {listing.quantity > 1 &&
-                            `${listing.unitPrice.toLocaleString("en-US")} each · `}
-                          by {listing.seller.name}
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-mute">
+                          {listing.quantity > 1 && (
+                            <span className="shrink-0">
+                              {listing.unitPrice.toLocaleString("en-US")} each ·
+                            </span>
+                          )}
+                          <span className="shrink-0">by</span>
+                          <Link
+                            href={`/players/${listing.seller.id}`}
+                            className="truncate font-semibold underline underline-offset-2 hover:text-ink"
+                          >
+                            {listing.seller.name}
+                          </Link>
+                        </p>
+                        <p className="mt-0.5 text-xs text-mute">
+                          {listing.sellerRating
+                            ? `★ ${listing.sellerRating.avg.toFixed(1)} (${listing.sellerRating.count})`
+                            : "New seller"}
                         </p>
 
                         <div className="mt-3">{action}</div>

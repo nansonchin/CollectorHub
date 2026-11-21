@@ -1,5 +1,6 @@
 import { SignOutButton } from "@/src/features/auth/components/SignOutButton";
 import { getSession } from "@/src/lib/session";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export const metadata = { title: "Account · CollectorHub" };
@@ -34,8 +35,14 @@ export default async function AccountPage() {
           </div>
         </dl>
 
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap items-center gap-4">
           <SignOutButton />
+          <Link
+            href={`/players/${user.id}`}
+            className="text-sm font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+          >
+            View my public profile
+          </Link>
         </div>
       </div>
     </div>

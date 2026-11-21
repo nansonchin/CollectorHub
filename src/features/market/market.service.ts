@@ -9,6 +9,7 @@ import {
 import { ListCardsQuery } from "../cards/cards.schema";
 import { buildCardWhere } from "../cards/cards.service";
 import { MAX_ACTIVE_RESERVATIONS, RESERVATION_HOURS } from "./market.config";
+import { getSellerRatings } from "../reviews/reviews.service";
 
 export type MarketErrorCode =
   | "NOT_ENOUGH_COPIES"
@@ -359,11 +360,31 @@ export async function listMarketListings(query: ListCardsQuery) {
     prisma.listing.count({ where }),
   ]);
 
+  const ratings =await getSellerRatings(items.map((item)=>item.sellerId))
+
+
   return {
-    items,
+      items: items.map((item) => ({
+      ...item,
+      sellerRating: ratings.get(item.sellerId) ?? null,
+    })),
     total,
     page,
     pageSize,
     totalPages: Math.ceil(total / pageSize),
   };
+}
+
+export async function listMyOrders(userId: string) {
+  return prisma.order.findMany({
+    where: { OR: [{ buyerId: userId }, { sellerId: userId }] },
+    include: {
+      card: true,
+      buyer: { select: { id: true, name: true } },
+      seller: { select: { id: true, name: true } },
+      reviews: { where: { reviewerId: userId }, select: { rating: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50, 
+  });
 }
