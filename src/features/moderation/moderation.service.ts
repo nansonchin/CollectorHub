@@ -170,10 +170,9 @@ export async function resolveReport(
 
   return prisma.$transaction(async (tx) => {
     const report = await tx.report.findUnique({ where: { id: reportId } });
-    if (!report) {
-      throw new ModerationError("REPORT_NOT_FOUND");
-    }
-    if (action === "REMOVE_LISTING" && report.targetId !== "LISTING") {
+    if (!report) throw new ModerationError("REPORT_NOT_FOUND");
+
+    if (action === "REMOVE_LISTING" && report.targetType !== "LISTING") {
       throw new ModerationError("INVALID_ACTION");
     }
     if (action === "HIDE_REVIEW" && report.targetType !== "REVIEW") {
@@ -181,9 +180,8 @@ export async function resolveReport(
     }
 
     if (action === "WARN_USER" || action === "BAN_USER") {
-      if (report.targetUserId === actor.id) {
+      if (report.targetUserId === actor.id)
         throw new ModerationError("ACTION_NOT_ALLOWED");
-      }
       const target = await tx.user.findUnique({
         where: { id: report.targetUserId },
         select: { role: true },
@@ -191,6 +189,7 @@ export async function resolveReport(
       if (!target || target.role === "ADMIN")
         throw new ModerationError("ACTION_NOT_ALLOWED");
     }
+
     const now = new Date();
     const claimed = await tx.report.updateMany({
       where: { id: reportId, status: "OPEN" },
@@ -217,6 +216,7 @@ export async function resolveReport(
         await banUser(tx, report.targetUserId, message!);
         break;
     }
+
     if (action !== "DISMISS") {
       await tx.report.updateMany({
         where: {
@@ -231,6 +231,7 @@ export async function resolveReport(
         data: { status: "RESOLVED", handledById: actor.id, handledAt: now },
       });
     }
+
     await tx.adminAction.create({
       data: {
         adminId: actor.id,
@@ -285,7 +286,6 @@ export type TargetSummary =
   | { kind: "USER" }
   | { kind: "REVIEW"; rating: number; comment: string | null; hidden: boolean }
   | { kind: "MISSING" };
-
 export async function listOpenReports() {
   const reports = await prisma.report.findMany({
     where: { status: "OPEN" },
@@ -297,9 +297,11 @@ export async function listOpenReports() {
       },
     },
   });
+
   const idsOf = (type: string) =>
-    reports.filter((r) => r.targetId === type).map((r) => r.targetId);
+    reports.filter((r) => r.targetType === type).map((r) => r.targetId);
   const userIds = [...new Set(reports.map((r) => r.targetUserId))];
+
   const [listings, reviews, totals] = await Promise.all([
     prisma.listing.findMany({
       where: { id: { in: idsOf("LISTING") } },
@@ -315,17 +317,20 @@ export async function listOpenReports() {
       where: { id: { in: idsOf("REVIEW") } },
       select: { id: true, rating: true, comment: true, hiddenAt: true },
     }),
+    // 这个人一共被举报过几次（包括已处理的），帮助判断他是不是惯犯
     prisma.report.groupBy({
       by: ["targetUserId"],
       where: { targetUserId: { in: userIds } },
       _count: { _all: true },
     }),
   ]);
+
   const listingById = new Map(listings.map((l) => [l.id, l]));
   const reviewById = new Map(reviews.map((r) => [r.id, r]));
   const totalByUser = new Map(
     totals.map((t) => [t.targetUserId, t._count._all]),
   );
+
   return reports.map((report) => {
     let target: TargetSummary = { kind: "MISSING" };
 

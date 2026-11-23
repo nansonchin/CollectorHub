@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   const session = await getSession();
   const gold = session ? await getWalletBalance(session.user.id) : 0;
