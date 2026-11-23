@@ -68,6 +68,44 @@ enum ReviewTag {
   FAIR_PRICE
 }
 
+// 用户角色：PLAYER 普通玩家；MODERATOR 版主（处理举报、下架、警告）；ADMIN 管理员（另外可以封号）。
+enum Role {
+  PLAYER
+  MODERATOR
+  ADMIN
+}
+
+// 举报的对象类型。目前可以举报挂单、玩家、评价。
+enum ReportTargetType {
+  LISTING
+  USER
+  REVIEW
+}
+
+enum ReportReason {
+  SPAM
+  MISLEADING
+  HARASSMENT
+  OTHER
+}
+
+// 举报的状态机：OPEN → RESOLVED（已处理）或 DISMISSED（驳回），之后不再变。
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+// 管理员做过的每一种操作，用于审计日志。
+enum AdminActionType {
+  DISMISS_REPORT
+  REMOVE_LISTING
+  HIDE_REVIEW
+  WARN_USER
+  BAN_USER
+  UNBAN_USER
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -239,6 +277,7 @@ model Review {
   rating     Int // 1 到 5 星
   tags       ReviewTag[]
   comment    String?
+  hiddenAt   DateTime? // 被管理员隐藏的评价：不显示，也不计入平均分
   createdAt  DateTime    @default(now())
   order      Order       @relation(fields: [orderId], references: [id], onDelete: Restrict)
   reviewer   User        @relation("ReviewWriter", fields: [reviewerId], references: [id], onDelete: Restrict)
@@ -246,6 +285,57 @@ model Review {
 
   @@unique([orderId, reviewerId])
   @@index([targetId, createdAt]) // 查"某个人收到的评价"和算平均分
+}
+
+// 举报：玩家举报挂单、玩家或评价。
+// targetType + targetId 指向被举报的东西（"多态引用"：一个字段能指向不同的表，
+// 代价是数据库没法用外键检查它存不存在，所以创建时由代码验证）。
+// targetUserId 是"该为此负责的人"（挂单的卖家、被举报的玩家、评价的作者），
+// 创建时就记下来，管理员可以直接看到"这个人一共被举报了几次"。
+// (reporterId, targetType, targetId) 唯一：同一个人对同一个东西只能举报一次，防止刷屏。
+model Report {
+  id           String           @id @default(cuid())
+  reporterId   String
+  targetType   ReportTargetType
+  targetId     String
+  targetUserId String
+  reason       ReportReason
+  details      String?
+  status       ReportStatus     @default(OPEN)
+  handledById  String?
+  handledAt    DateTime?
+  createdAt    DateTime         @default(now())
+  reporter     User             @relation("ReportWriter", fields: [reporterId], references: [id], onDelete: Restrict)
+  targetUser   User             @relation("ReportAbout", fields: [targetUserId], references: [id], onDelete: Restrict)
+  handledBy    User?            @relation("ReportHandler", fields: [handledById], references: [id], onDelete: SetNull)
+  actions      AdminAction[]
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt]) // 管理员的待处理队列
+  @@index([targetType, targetId])
+  @@index([targetUserId])
+}
+
+// 审计日志：管理员的每一次操作都留一行，只增不改不删。
+// 出了争议可以回答"谁、什么时候、对谁、做了什么、为什么"。
+// message 是会展示给被处理玩家的话（警告内容、封号原因）；note 是只有管理员能看到的内部备注。
+model AdminAction {
+  id           String           @id @default(cuid())
+  adminId      String
+  type         AdminActionType
+  reportId     String?
+  targetUserId String?
+  targetType   ReportTargetType?
+  targetId     String?
+  note         String?
+  message      String?
+  createdAt    DateTime         @default(now())
+  admin        User             @relation("AdminActor", fields: [adminId], references: [id], onDelete: Restrict)
+  targetUser   User?            @relation("AdminActionTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  report       Report?          @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([targetUserId, createdAt])
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------------
@@ -262,6 +352,9 @@ model User {
   email         String          @unique
   emailVerified Boolean         @default(false)
   image         String?
+  role          Role            @default(PLAYER)
+  bannedAt      DateTime? // 有值就是被封号了
+  banReason     String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   sessions      Session[]
@@ -276,6 +369,11 @@ model User {
   payments      Payment[]
   reviewsWritten  Review[]    @relation("ReviewWriter")
   reviewsReceived Review[]    @relation("ReviewTarget")
+  reportsMade         Report[]      @relation("ReportWriter")
+  reportsAgainst      Report[]      @relation("ReportAbout")
+  reportsHandled      Report[]      @relation("ReportHandler")
+  adminActionsDone    AdminAction[] @relation("AdminActor")
+  adminActionsReceived AdminAction[] @relation("AdminActionTarget")
 
   @@map("user")
 }
