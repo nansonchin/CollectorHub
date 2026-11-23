@@ -13,12 +13,12 @@ export async function getPlayerProfile(userId: string) {
     }),
   
     prisma.review.aggregate({
-      where: { targetId: userId },
+      where: { targetId: userId,hiddenAt: null },
       _avg: { rating: true },
       _count: { _all: true },
     }),
     prisma.review.findMany({
-      where: { targetId: userId },
+      where: { targetId: userId,hiddenAt: null },
       orderBy: { createdAt: "desc" },
       take: 10,
       select: {

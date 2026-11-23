@@ -1,4 +1,5 @@
 import { SignOutButton } from "@/src/features/auth/components/SignOutButton";
+import { listNoticesForUser } from "@/src/features/moderation/moderation.service";
 import { getSession } from "@/src/lib/session";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -10,6 +11,7 @@ export default async function AccountPage() {
   if (!session) redirect("/sign-in");
 
   const { user } = session;
+   const notices = await listNoticesForUser(user.id);
   const memberSince = new Date(user.createdAt).toLocaleDateString("en", {
     year: "numeric",
     month: "long",
@@ -45,6 +47,29 @@ export default async function AccountPage() {
           </Link>
         </div>
       </div>
+
+      {notices.length > 0 && (
+        <section aria-labelledby="notices-heading" className="mt-8">
+          <h2 id="notices-heading" className="font-display text-2xl font-bold">
+            Notices from moderators
+          </h2>
+          <ul className="mt-4 space-y-3">
+            {notices.map((notice) => (
+              <li key={notice.id} className="rounded-[28px] bg-[#FFE3D6] px-6 py-4">
+                <p className="font-semibold text-[#B8441A]">Warning</p>
+                <p className="mt-1 text-ink/80">{notice.message}</p>
+                <p className="mt-1 text-xs text-mute">
+                  {notice.createdAt.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

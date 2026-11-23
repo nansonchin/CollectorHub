@@ -14,6 +14,7 @@ import {
   listMarketListings,
   tryExpireStaleReservation,
 } from "@/src/features/market/market.service";
+import { ReportDialog } from "@/src/features/moderation/components/ReportDialog";
 import { getSession } from "@/src/lib/session";
 import { formatTimeLeft } from "@/src/lib/time";
 import Link from "next/link";
@@ -35,6 +36,7 @@ export default async function MarketPage({
   const { q, element, rarity } = query;
 
   await tryExpireStaleReservation();
+
   const session = await getSession();
 
   const [list, balance] = await Promise.all([
@@ -65,12 +67,7 @@ export default async function MarketPage({
           </p>
         </header>
 
-        <CollectionFilters
-          q={q}
-          element={element}
-          rarity={rarity}
-          basePath="/market"
-        />
+        <CollectionFilters q={q} element={element} rarity={rarity} basePath="/market" />
 
         <div className="mt-8">
           {items.length > 0 ? (
@@ -79,20 +76,16 @@ export default async function MarketPage({
                 {items.map((listing) => {
                   const total = listing.quantity * listing.unitPrice;
                   const isMine = session?.user.id === listing.sellerId;
-
                   const reservation = listing.reservations[0];
                   const reservedByMe =
-                    reservation !== undefined &&
-                    reservation.buyerId === session?.user.id;
+                    reservation !== undefined && reservation.buyerId === session?.user.id;
 
                   let action: React.ReactNode;
 
                   if (isMine) {
                     action = (
                       <p className="flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold text-mute">
-                        {reservation
-                          ? "Your listing · reserved"
-                          : "Your listing"}
+                        {reservation ? "Your listing · reserved" : "Your listing"}
                       </p>
                     );
                   } else if (!session || balance === null) {
@@ -108,8 +101,7 @@ export default async function MarketPage({
                     action = (
                       <div className="space-y-2">
                         <p className="text-xs font-semibold text-[#7a5a10]">
-                          Reserved for you ·{" "}
-                          {formatTimeLeft(reservation.expiresAt)} left
+                          Reserved for you · {formatTimeLeft(reservation.expiresAt)} left
                         </p>
                         <div className="grid grid-cols-2 gap-2">
                           <BuyDialog
@@ -148,7 +140,7 @@ export default async function MarketPage({
                     <li key={listing.id}>
                       <CardTile card={listing.card} />
 
-                       <div className="mt-3 px-1">
+                      <div className="mt-3 px-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-display text-xl font-bold">
                             {total.toLocaleString("en-US")}{" "}
@@ -179,6 +171,15 @@ export default async function MarketPage({
                         </p>
 
                         <div className="mt-3">{action}</div>
+                        {session && !isMine && (
+                          <div className="mt-2 text-right">
+                            <ReportDialog
+                              targetType="LISTING"
+                              targetId={listing.id}
+                              subject="this listing"
+                            />
+                          </div>
+                        )}
                       </div>
                     </li>
                   );
@@ -196,9 +197,7 @@ export default async function MarketPage({
           ) : (
             <div className="rounded-[28px] bg-white p-10 text-center shadow-soft">
               <h2 className="font-display text-xl font-bold">
-                {total === 0
-                  ? "Nothing for sale here"
-                  : "That page doesn't exist"}
+                {total === 0 ? "Nothing for sale here" : "That page doesn't exist"}
               </h2>
               <p className="mt-1 text-mute">
                 {total === 0
@@ -206,9 +205,7 @@ export default async function MarketPage({
                   : `This list only has ${totalPages} ${totalPages === 1 ? "page" : "pages"}.`}
               </p>
               <Link
-                href={
-                  total === 0 ? "/market" : marketHref({ q, element, rarity })
-                }
+                href={total === 0 ? "/market" : marketHref({ q, element, rarity })}
                 className={`mt-5 inline-flex h-11 items-center rounded-full bg-ink px-6 text-sm font-semibold text-white ${focusRing}`}
               >
                 {total === 0 ? "Clear filters" : "Go to page 1"}

@@ -14,17 +14,27 @@ export const metadata: Metadata = {
   description: "Collect, trade and complete your card collection",
 };
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const session = await getSession();
-  const gold = session? await getWalletBalance(session.user.id):0;
-  
+  const gold = session ? await getWalletBalance(session.user.id) : 0;
+
   return (
     <html lang="en">
       <body
         className={`${syne.variable} ${figtree.variable} bg-paper font-sans text-ink antialiased`}
       >
         <div className="mx-auto max-w-[1280px] px-4 pb-16 pt-5 sm:px-6">
-          <TopNav user={session?{name:session.user.name,gold}:null}/>
+          <TopNav
+            user={
+              session
+                ? { name: session.user.name, gold, role: session.user.role }
+                : null
+            }
+          />{" "}
           <main className="mt-6">{children}</main>
         </div>
       </body>

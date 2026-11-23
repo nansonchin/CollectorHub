@@ -137,6 +137,43 @@ async function main() {
     }
   }
 
+  // 6. 封号必须彻底：被封的人没有任何登录状态，也没有在售/被保留的挂单、有效的保留。
+  const bannedUsers = await prisma.user.findMany({
+    where: { bannedAt: { not: null } },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          sessions: true,
+          listings: { where: { status: { in: ["AVAILABLE", "RESERVED"] } } },
+          reservations: { where: { status: "ACTIVE" } },
+        },
+      },
+    },
+  });
+  for (const user of bannedUsers) {
+    const { sessions, listings, reservations } = user._count;
+    if (sessions > 0 || listings > 0 || reservations > 0) {
+      problems.push(
+        `Banned user ${user.id} still has ${sessions} sessions, ${listings} open listings, ${reservations} active reservations`,
+      );
+    }
+  }
+
+  // 7. 已经处理的举报必须记着是谁处理的；还没处理的不能有处理人。
+  const handled = await prisma.report.findMany({
+    where: {
+      OR: [
+        { status: { not: "OPEN" }, handledById: null },
+        { status: "OPEN", handledById: { not: null } },
+      ],
+    },
+    select: { id: true, status: true },
+  });
+  for (const report of handled) {
+    problems.push(`Report ${report.id} is ${report.status} but its handler is inconsistent`);
+  }
+
   console.log(
     `Checked ${wallets.length} wallets, ${inventory.length} inventory rows, ${openListings.length} open listing groups.`,
   );

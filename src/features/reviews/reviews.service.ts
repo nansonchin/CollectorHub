@@ -49,7 +49,7 @@ export async function getSellerRatings(sellerIds: string[]) {
 
   const rows = await prisma.review.groupBy({
     by: ["targetId"],
-    where: { targetId: { in: unique } },
+    where: { targetId: { in: unique }, hiddenAt: null },
     _avg: { rating: true },
     _count: { _all: true },
   });

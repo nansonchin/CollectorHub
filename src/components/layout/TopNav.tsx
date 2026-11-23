@@ -11,6 +11,7 @@ import {
   Receipt,
   ScrollText,
   Shield,
+  ShieldCheck,
   Store,
 } from "lucide-react";
 
@@ -24,12 +25,16 @@ const NAV_ITEMS = [
   { href: "/trade", label: "Trade", icon: ArrowLeftRight, enabled: false },
 ];
 
+const ADMIN_ITEM = { href: "/admin", label: "Admin", icon: ShieldCheck, enabled: true };
+
 const itemBase =
   "flex h-11 shrink-0 items-center gap-2 border-b-[3px] px-3 text-sm font-semibold";
 
-export function TopNav({ user }: { user: { name: string; gold: number } | null }) {
+export function TopNav({ user }: {   user: { name: string; gold: number; role: "PLAYER" | "MODERATOR" | "ADMIN" } | null;}) {
+  
   const pathname = usePathname();
-
+  const navItems= user && user.role !=="PLAYER"?[...NAV_ITEMS,ADMIN_ITEM]:NAV_ITEMS;
+  
   return (
     <header className="relative z-20 flex items-center gap-3 rounded-[28px] bg-white px-4 shadow-soft sm:gap-5 sm:px-6">
       <Link href="/" className="flex shrink-0 items-center gap-2.5 py-3">
@@ -46,7 +51,7 @@ export function TopNav({ user }: { user: { name: string; gold: number } | null }
         aria-label="Main"
         className="flex flex-1 items-center gap-1 overflow-x-auto pt-[3px]"
       >
-        {NAV_ITEMS.map(({ href, label, icon: Icon, enabled }) => {
+        {navItems.map(({ href, label, icon: Icon, enabled }) => {
           if (!enabled) {
             return (
               <span

@@ -1,7 +1,9 @@
+import { ReportDialog } from "@/src/features/moderation/components/ReportDialog";
 import { getPlayerProfile } from "@/src/features/players/players.service";
 import { Stars } from "@/src/features/reviews/components/Stars";
 import { REVIEW_TAG_LABELS, ReviewTagId } from "@/src/features/reviews/reviews.config";
 import { formatDateML } from "@/src/lib/date";
+import { getSession } from "@/src/lib/session";
 import { notFound } from "next/navigation";
 
 type Props = { params: Promise<{ id: string }> };
@@ -11,21 +13,28 @@ export async function generateMetadata({ params }: Props) {
   const profile = await getPlayerProfile(id);
   return { title: profile ? `${profile.user.name} · CollectorHub` : "Player not found" };
 }
+export default async function PlayerPage({ params }: Props) {
+  const { id } = await params;
+  const profile = await getPlayerProfile(id);
 
-export default async function PlayerPage({params}:Props){
-    const {id} = await params;
-    const profile = await getPlayerProfile(id)
+  if (!profile) notFound();
 
-    if(!profile) notFound()
+  const { user, tradeCount, ratingAverage, ratingCount, reviews } = profile;
 
-    const {user,tradeCount,ratingAverage,ratingCount,reviews} = profile
+  const session = await getSession();
+  const viewerId = session?.user.id ?? null;
 
-    return (
+  return (
     <div className="relative overflow-x-clip">
       <div className="relative mx-auto max-w-3xl">
         <header className="mb-6">
           <h1 className="font-display text-4xl font-extrabold">{user.name}</h1>
-          <p className="mt-1 text-mute">Member since {formatDateML(user.createdAt)}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <p className="text-mute">Member since {formatDateML(user.createdAt)}</p>
+            {viewerId && viewerId !== user.id && (
+              <ReportDialog targetType="USER" targetId={user.id} subject={user.name} />
+            )}
+          </div>
         </header>
 
         <section
@@ -70,9 +79,18 @@ export default async function PlayerPage({params}:Props){
                 <li key={review.id} className="rounded-[28px] bg-white px-6 py-5 shadow-soft">
                   <div className="flex items-center justify-between gap-3">
                     <Stars value={review.rating} />
-                    <p className="text-sm text-mute">
-                      {review.reviewer.name} · {formatDateML(review.createdAt)}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm text-mute">
+                        {review.reviewer.name} · {formatDateML(review.createdAt)}
+                      </p>
+                      {viewerId && review.reviewer.id !== viewerId && (
+                        <ReportDialog
+                          targetType="REVIEW"
+                          targetId={review.id}
+                          subject="this review"
+                        />
+                      )}
+                    </div>
                   </div>
 
                   {review.tags.length > 0 && (
@@ -87,6 +105,7 @@ export default async function PlayerPage({params}:Props){
                       ))}
                     </ul>
                   )}
+
                   {review.comment && (
                     <p className="mt-3 whitespace-pre-line text-ink/80">{review.comment}</p>
                   )}
@@ -100,5 +119,4 @@ export default async function PlayerPage({params}:Props){
       </div>
     </div>
   );
-
 }

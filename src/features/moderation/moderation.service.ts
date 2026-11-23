@@ -362,7 +362,7 @@ export async function listOpenReports() {
   });
 }
 
-export async function listBannedUser() {
+export async function listBannedUsers() {
   return prisma.user.findMany({
     where: {
       bannedAt: { not: null },
@@ -372,7 +372,7 @@ export async function listBannedUser() {
   });
 }
 
-export async function listRecentAction(take = 20) {
+export async function listRecentActions(take = 20) {
   return prisma.adminAction.findMany({
     orderBy: { createdAt: "desc" },
     take,
