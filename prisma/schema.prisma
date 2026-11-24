@@ -106,6 +106,24 @@ enum AdminActionType {
   UNBAN_USER
 }
 
+// 交换的状态机：PENDING → COMPLETED（对方接受，交换立刻完成）
+//                或 REJECTED（对方拒绝）/ CANCELLED（发起人撤回）/ EXPIRED（超时）。
+// 注意：没有"已接受但未完成"的中间状态。接受的那一刻，卡牌和 Gold 在同一个事务里互换完毕，
+// 多一个中间状态只会多出"接受了却没换成"这种需要额外处理的故障。
+enum TradeStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+// 交换条目属于哪一边：OFFER = 发起人拿出来的；REQUEST = 发起人想从对方那里得到的。
+enum TradeSide {
+  OFFER
+  REQUEST
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -122,6 +140,7 @@ model Card {
   inventory   InventoryItem[]
   listings    Listing[]
   orders      Order[]
+  tradeItems  TradeItem[]
 
   @@index([element])
   @@index([rarity])
@@ -338,6 +357,48 @@ model AdminAction {
   @@index([createdAt])
 }
 
+// 一次交换提议：发起人（proposer）想用自己的卡牌 + Gold，换对方（recipient）的卡牌 + Gold。
+//
+// 托管规则（和挂单、保留是同一个模式）：
+//   创建时：发起人拿出来的卡被锁住（reservedQuantity），拿出来的 Gold 被冻结（frozenBalance）。
+//   取消 / 拒绝 / 过期：释放。
+//   对方接受：双方的卡和 Gold 在一个事务里互换。
+// 对方要给的卡和 Gold，在创建时不锁（对方还没同意，不能占用他的东西），
+// 接受的那一刻才检查他是否还拥有。
+model Trade {
+  id            String      @id @default(cuid())
+  proposerId    String
+  recipientId   String
+  status        TradeStatus @default(PENDING)
+  offeredGold   Int         @default(0) // 发起人付出的 Gold
+  requestedGold Int         @default(0) // 发起人想要的 Gold（由对方付出）
+  message       String?
+  expiresAt     DateTime
+  respondedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  proposer      User        @relation("TradeProposer", fields: [proposerId], references: [id], onDelete: Restrict)
+  recipient     User        @relation("TradeRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  items         TradeItem[]
+
+  @@index([recipientId, status])
+  @@index([proposerId, status])
+  @@index([status, expiresAt]) // 过期扫描
+}
+
+model TradeItem {
+  id       String    @id @default(cuid())
+  tradeId  String
+  side     TradeSide
+  cardId   String
+  quantity Int
+  trade    Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  card     Card      @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@unique([tradeId, side, cardId]) // 同一边同一张卡只出现一次，数量用 quantity 表示
+  @@index([cardId])
+}
+
 // ---------------------------------------------------------------------
 // 以下四张表是 Better Auth 需要的标准结构（账号、登录状态、验证码）。
 // 字段名由这个库规定，不要改名；以后需要的自定义字段（例如 role）
@@ -374,6 +435,8 @@ model User {
   reportsHandled      Report[]      @relation("ReportHandler")
   adminActionsDone    AdminAction[] @relation("AdminActor")
   adminActionsReceived AdminAction[] @relation("AdminActionTarget")
+  tradesProposed      Trade[]       @relation("TradeProposer")
+  tradesReceived      Trade[]       @relation("TradeRecipient")
 
   @@map("user")
 }
