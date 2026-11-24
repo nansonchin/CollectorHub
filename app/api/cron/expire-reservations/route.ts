@@ -1,4 +1,5 @@
 import { expireStaleReservations } from "@/src/features/market/market.service";
+import { expireStaleQuests } from "@/src/features/quests/Quests.service";
 import { expireStaleTrades } from "@/src/features/trades/trades.service";
 import { NextResponse } from "next/server";
 
@@ -12,6 +13,7 @@ export async function GET(request: Request) {
   try {
     const expired = await expireStaleReservations();
     const expiredTrades = await expireStaleTrades()
+    const quests = await expireStaleQuests();
     return NextResponse.json({ expired });
   } catch (error) {
     console.error("Cron expire-reservations failed:", error);
