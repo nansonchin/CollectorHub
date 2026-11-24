@@ -1,5 +1,6 @@
 import { TradeActions } from "@/src/features/trades/components/TradeActions";
 import { listMyTrades, tryExpireStaleTime } from "@/src/features/trades/trades.service";
+import { formatDateMD } from "@/src/lib/date";
 import { getSession } from "@/src/lib/session";
 import { formatTimeLeft } from "@/src/lib/time";
 import Link from "next/link";
@@ -41,10 +42,6 @@ function TradeCard({ trade, viewerId }: { trade: TradeRow; viewerId: string }) {
 
     const status = STATUS_STYLE[trade.status]
 
-    function formatDateMd(createdAt: Date): import("react").ReactNode {
-        throw new Error("Function not implemented.");
-    }
-
     return (
     <li className="space-y-4 rounded-[28px] bg-white p-6 shadow-soft">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -56,7 +53,7 @@ function TradeCard({ trade, viewerId }: { trade: TradeRow; viewerId: string }) {
           >
             {counterpart.name}
           </Link>{" "}
-          · {formatDateMd(trade.createdAt)}
+          · {formatDateMD(trade.createdAt)}
         </p>
         <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${status.className}`}>
           {status.label}

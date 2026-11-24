@@ -1,7 +1,10 @@
 import { ReportDialog } from "@/src/features/moderation/components/ReportDialog";
 import { getPlayerProfile } from "@/src/features/players/players.service";
 import { Stars } from "@/src/features/reviews/components/Stars";
-import { REVIEW_TAG_LABELS, ReviewTagId } from "@/src/features/reviews/reviews.config";
+import {
+  REVIEW_TAG_LABELS,
+  ReviewTagId,
+} from "@/src/features/reviews/reviews.config";
 import { formatDateML } from "@/src/lib/date";
 import { getSession } from "@/src/lib/session";
 import Link from "next/link";
@@ -12,7 +15,9 @@ type Props = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const profile = await getPlayerProfile(id);
-  return { title: profile ? `${profile.user.name} · CollectorHub` : "Player not found" };
+  return {
+    title: profile ? `${profile.user.name} · CollectorHub` : "Player not found",
+  };
 }
 export default async function PlayerPage({ params }: Props) {
   const { id } = await params;
@@ -31,9 +36,23 @@ export default async function PlayerPage({ params }: Props) {
         <header className="mb-6">
           <h1 className="font-display text-4xl font-extrabold">{user.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <p className="text-mute">Member since {formatDateML(user.createdAt)}</p>
+            <p className="text-mute">
+              Member since {formatDateML(user.createdAt)}
+            </p>
             {viewerId && viewerId !== user.id && (
-              <ReportDialog targetType="USER" targetId={user.id} subject={user.name} />
+              <>
+                <Link
+                  href={`/trades/new?to=${user.id}`}
+                  className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  Propose a trade
+                </Link>
+                <ReportDialog
+                  targetType="USER"
+                  targetId={user.id}
+                  subject={user.name}
+                />
+              </>
             )}
           </div>
         </header>
@@ -77,27 +96,24 @@ export default async function PlayerPage({ params }: Props) {
           {reviews.length > 0 ? (
             <ul className="mt-5 space-y-3">
               {reviews.map((review) => (
-                <li key={review.id} className="rounded-[28px] bg-white px-6 py-5 shadow-soft">
+                <li
+                  key={review.id}
+                  className="rounded-[28px] bg-white px-6 py-5 shadow-soft"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <Stars value={review.rating} />
                     <div className="flex items-center gap-3">
                       <p className="text-sm text-mute">
-                        {review.reviewer.name} · {formatDateML(review.createdAt)}
+                        {review.reviewer.name} ·{" "}
+                        {formatDateML(review.createdAt)}
                       </p>
                       {viewerId && review.reviewer.id !== viewerId && (
                         <>
-                        <Link href={
-                          `/trades/new?to=${user.id}`
-                        }
-                        className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-                        >
-                        Propose a trade
-                        </Link>
                           <ReportDialog
-                          targetType="REVIEW"
-                          targetId={review.id}
-                          subject="this review"
-                        />
+                            targetType="REVIEW"
+                            targetId={review.id}
+                            subject="this review"
+                          />
                         </>
                       )}
                     </div>
@@ -117,13 +133,17 @@ export default async function PlayerPage({ params }: Props) {
                   )}
 
                   {review.comment && (
-                    <p className="mt-3 whitespace-pre-line text-ink/80">{review.comment}</p>
+                    <p className="mt-3 whitespace-pre-line text-ink/80">
+                      {review.comment}
+                    </p>
                   )}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-5 text-mute">This player has not received any reviews yet.</p>
+            <p className="mt-5 text-mute">
+              This player has not received any reviews yet.
+            </p>
           )}
         </section>
       </div>
