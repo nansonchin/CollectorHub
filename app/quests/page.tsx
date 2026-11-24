@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { Pagination } from "@/src/components/ui/Pagination";
-import { formatCardNumber } from "@/src/features/cards/cards.meta";
 import {
   listCardsQuerySchema,
   parseListCardsQuery,
 } from "@/src/features/cards/cards.schema";
+import { formatCardNumber } from "@/src/features/cards/cards.meta";
 import { filtersHref } from "@/src/features/cards/cards.url";
 import { CardTile } from "@/src/features/cards/components/CardTile";
 import { CollectionFilters } from "@/src/features/cards/components/CollectionFilters";
@@ -15,13 +16,12 @@ import { PostQuestDialog } from "@/src/features/quests/components/PostQuestDialo
 import { QuestActions } from "@/src/features/quests/components/QuestActions";
 import {
   listMyQuests,
-  listQuestableCards,
   listQuestBoard,
+  listQuestableCards,
   tryExpireStaleQuests,
 } from "@/src/features/quests/quests.service";
 import { getSession } from "@/src/lib/session";
 import { formatTimeLeft } from "@/src/lib/time";
-import Link from "next/link";
 
 export const metadata = { title: "Quests · CollectorHub" };
 
@@ -52,16 +52,13 @@ export default async function QuestsPage({
   ]);
 
   const { items, total, page, pageSize, totalPages } = board;
-
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
   const ownedByCardId = viewerId
-    ? await getOwnedQuantities(
-        viewerId,
-        items.map((quest) => quest.cardId),
-      )
+    ? await getOwnedQuantities(viewerId, items.map((quest) => quest.cardId))
     : null;
+
   return (
     <div className="relative overflow-x-clip">
       <span
@@ -70,6 +67,7 @@ export default async function QuestsPage({
       >
         Wanted
       </span>
+
       <div className="relative">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -91,12 +89,10 @@ export default async function QuestsPage({
             </Link>
           )}
         </header>
+
         {mine && mine.accepted.length > 0 && (
           <section aria-labelledby="accepted-heading" className="mb-10">
-            <h2
-              id="accepted-heading"
-              className="font-display text-2xl font-bold"
-            >
+            <h2 id="accepted-heading" className="font-display text-2xl font-bold">
               Quests you accepted
             </h2>
             <ul className="mt-5 space-y-3">
@@ -134,27 +130,19 @@ export default async function QuestsPage({
                     </div>
                     <p className="font-display text-xl font-bold">
                       +{quest.rewardGold.toLocaleString("en-US")}{" "}
-                      <span className="text-sm font-semibold text-mute">
-                        Gold
-                      </span>
+                      <span className="text-sm font-semibold text-mute">Gold</span>
                     </p>
-                    <QuestActions
-                      questId={quest.id}
-                      mode="accepter"
-                      canDeliver={enough}
-                    />
+                    <QuestActions questId={quest.id} mode="accepter" canDeliver={enough} />
                   </li>
                 );
               })}
             </ul>
           </section>
         )}
+
         {mine && mine.created.length > 0 && (
           <section aria-labelledby="created-heading" className="mb-10">
-            <h2
-              id="created-heading"
-              className="font-display text-2xl font-bold"
-            >
+            <h2 id="created-heading" className="font-display text-2xl font-bold">
               Your quests
             </h2>
             <ul className="mt-5 space-y-3">
@@ -188,28 +176,22 @@ export default async function QuestsPage({
                   </div>
                   <p className="font-display text-xl font-bold">
                     {quest.rewardGold.toLocaleString("en-US")}{" "}
-                    <span className="text-sm font-semibold text-mute">
-                      Gold frozen
-                    </span>
+                    <span className="text-sm font-semibold text-mute">Gold frozen</span>
                   </p>
                   {quest.status === "OPEN" ? (
                     <QuestActions questId={quest.id} mode="creator" />
                   ) : (
-                    <p className="text-sm font-semibold text-[#7a5a10]">
-                      In progress
-                    </p>
+                    // 已经有人接单：发布人不能撤销，接单人正在为它准备
+                    <p className="text-sm font-semibold text-[#7a5a10]">In progress</p>
                   )}
                 </li>
               ))}
             </ul>
           </section>
         )}
-        <CollectionFilters
-          q={q}
-          element={element}
-          rarity={rarity}
-          basePath="/quests"
-        />
+
+        <CollectionFilters q={q} element={element} rarity={rarity} basePath="/quests" />
+
         <div className="mt-8">
           {items.length > 0 ? (
             <>
@@ -220,23 +202,16 @@ export default async function QuestsPage({
                     <li key={quest.id}>
                       <CardTile
                         card={quest.card}
-                        owned={
-                          ownedByCardId
-                            ? (ownedByCardId.get(quest.cardId) ?? 0)
-                            : null
-                        }
+                        owned={ownedByCardId ? (ownedByCardId.get(quest.cardId) ?? 0) : null}
                       />
+
                       <div className="mt-3 px-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="font-display text-xl font-bold">
                             {quest.rewardGold.toLocaleString("en-US")}{" "}
-                            <span className="text-sm font-semibold text-mute">
-                              Gold
-                            </span>
+                            <span className="text-sm font-semibold text-mute">Gold</span>
                           </p>
-                          <p className="text-sm font-semibold">
-                            Wants ×{quest.quantity}
-                          </p>
+                          <p className="text-sm font-semibold">Wants ×{quest.quantity}</p>
                         </div>
                         <p className="mt-0.5 flex items-center gap-1 text-xs text-mute">
                           <span className="shrink-0">by</span>
@@ -246,10 +221,11 @@ export default async function QuestsPage({
                           >
                             {quest.creator.name}
                           </Link>
-                            <span className="shrink-0">· {formatTimeLeft(quest.expiresAt)} left</span>
+                          <span className="shrink-0">· {formatTimeLeft(quest.expiresAt)} left</span>
                         </p>
+
                         <div className="mt-3">
-                              {isMine ? (
+                          {isMine ? (
                             <p className="flex h-10 items-center justify-center rounded-full bg-paper text-sm font-semibold text-mute">
                               Your quest
                             </p>
@@ -269,7 +245,8 @@ export default async function QuestsPage({
                   );
                 })}
               </ul>
-                 <div className="mt-10">
+
+              <div className="mt-10">
                 <Pagination
                   page={page}
                   totalPages={totalPages}
@@ -278,7 +255,7 @@ export default async function QuestsPage({
               </div>
             </>
           ) : (
-              <div className="rounded-[28px] bg-white p-10 text-center shadow-soft">
+            <div className="rounded-[28px] bg-white p-10 text-center shadow-soft">
               <h2 className="font-display text-xl font-bold">
                 {total === 0 ? "No open quests here" : "That page doesn't exist"}
               </h2>
@@ -300,4 +277,3 @@ export default async function QuestsPage({
     </div>
   );
 }
-

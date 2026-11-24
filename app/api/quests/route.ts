@@ -1,4 +1,5 @@
 import { questErrorResponse } from "@/src/features/quests/quests.http";
+import { createQuestSchema } from "@/src/features/quests/quests.schema";
 import { createQuest } from "@/src/features/quests/quests.service";
 import { getSession } from "@/src/lib/session";
 import { NextResponse } from "next/server";

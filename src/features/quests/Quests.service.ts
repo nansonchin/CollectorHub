@@ -53,25 +53,16 @@ export async function createQuest(creatorId: string, input: CreateQuestInput) {
   const { cardId, quantity, rewardGold } = input;
 
   const card = await prisma.card.findUnique({
-    where: {
-      id: cardId,
-    },
-    select: {
-      id: true,
-    },
+    where: { id: cardId },
+    select: { id: true },
   });
-
-  if (!card) {
-    throw new QuestError("INVALID_CARD");
-  }
+  if (!card) throw new QuestError("INVALID_CARD");
 
   const openCount = await prisma.quest.count({
     where: { creatorId, status: { in: ["OPEN", "ACCEPTED"] } },
   });
-
-  if (openCount >= MAX_OPEN_QUESTS) {
+  if (openCount >= MAX_OPEN_QUESTS)
     throw new QuestError("TOO_MANY_OPEN_QUESTS");
-  }
 
   return prisma.$transaction(async (tx) => {
     try {
@@ -99,9 +90,7 @@ export async function cancelQuest(creatorId: string, questId: string) {
     const quest = await tx.quest.findFirst({
       where: { id: questId, creatorId },
     });
-    if (!quest) {
-      throw new QuestError("QUEST_NOT_FOUND");
-    }
+    if (!quest) throw new QuestError("QUEST_NOT_FOUND");
 
     await lockWallets(tx, [creatorId]);
 
@@ -119,12 +108,9 @@ export async function cancelQuest(creatorId: string, questId: string) {
 export async function acceptQuest(accepterId: string, questId: string) {
   return prisma.$transaction(async (tx) => {
     const quest = await tx.quest.findUnique({ where: { id: questId } });
-    if (!quest) {
-      throw new QuestError("QUEST_NOT_FOUND");
-    }
-    if (quest.creatorId === accepterId) {
+    if (!quest) throw new QuestError("QUEST_NOT_FOUND");
+    if (quest.creatorId === accepterId)
       throw new QuestError("CANNOT_ACCEPT_OWN");
-    }
 
     await tx.quest.updateMany({
       where: {
@@ -142,14 +128,11 @@ export async function acceptQuest(accepterId: string, questId: string) {
       throw new QuestError("TOO_MANY_ACCEPTED");
 
     const now = new Date();
-
     const { count } = await tx.quest.updateMany({
       where: {
         id: questId,
         status: "OPEN",
-        expiresAt: {
-          gt: now,
-        },
+        expiresAt: { gt: now },
         creatorId: { not: accepterId },
       },
       data: {
@@ -177,15 +160,13 @@ export async function abandonQuest(accepterId: string, questId: string) {
 export async function deliverQuest(accepterId: string, questId: string) {
   return prisma.$transaction(async (tx) => {
     const quest = await tx.quest.findFirst({
-      where: {
-        id: questId,
-        accepterId,
-      },
+      where: { id: questId, accepterId },
     });
     if (!quest) throw new QuestError("QUEST_NOT_FOUND");
-    await lockWallets(tx, [quest.creatorId, accepterId]);
-    const now = new Date();
 
+    await lockWallets(tx, [quest.creatorId, accepterId]);
+
+    const now = new Date();
     const { count } = await tx.quest.updateMany({
       where: {
         id: questId,
@@ -206,6 +187,7 @@ export async function deliverQuest(accepterId: string, questId: string) {
     );
     if (!taken) throw new QuestError("NOT_ENOUGH_COPIES");
     await giveCopies(tx, quest.creatorId, quest.cardId, quest.quantity);
+
     const ref = { refType: "Quest", refId: quest.id };
     await spendFrozenGold(tx, {
       userId: quest.creatorId,
@@ -234,28 +216,25 @@ async function reopenTimedOutAcceptances() {
 
 async function expireOpenQuests() {
   const stale = await prisma.quest.findMany({
-    where: {
-      status: "OPEN",
-      expiresAt: { lte: new Date() },
-      select: { id: true },
-      orderBy: { id: "asc" },
-    },
+    where: { status: "OPEN", expiresAt: { lte: new Date() } },
+    select: { id: true },
+    orderBy: { id: "asc" },
   });
 
   let expired = 0;
   for (const { id } of stale) {
     const done = await prisma.$transaction(async (tx) => {
       const quest = await tx.quest.findUnique({ where: { id } });
-      if (!quest) {
-        return false;
-      }
+      if (!quest) return false;
+
       await lockWallets(tx, [quest.creatorId]);
 
       const { count } = await tx.quest.updateMany({
         where: { id, status: "OPEN", expiresAt: { lte: new Date() } },
         data: { status: "EXPIRED" },
       });
-      if (count === 0) return false; //just being accepted by others
+      if (count === 0) return false;
+
       await releaseGold(tx, quest.creatorId, quest.rewardGold);
       return true;
     });
@@ -294,6 +273,7 @@ export async function releaseAllQuestsForUser(tx: Tx, userId: string) {
     tx,
     quests.map((quest) => quest.creatorId),
   );
+
   for (const quest of quests) {
     if (quest.creatorId === userId) {
       const { count } = await tx.quest.updateMany({
@@ -354,6 +334,7 @@ export async function listMyQuests(userId: string) {
       orderBy: { acceptExpiresAt: "asc" },
     }),
   ]);
+
   const items = await prisma.inventoryItem.findMany({
     where: { userId, cardId: { in: accepted.map((quest) => quest.cardId) } },
     select: { cardId: true, quantity: true, reservedQuantity: true },
@@ -361,6 +342,7 @@ export async function listMyQuests(userId: string) {
   const availableByCard = new Map(
     items.map((item) => [item.cardId, item.quantity - item.reservedQuantity]),
   );
+
   return {
     created,
     accepted: accepted.map((quest) => ({
