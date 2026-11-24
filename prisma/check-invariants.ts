@@ -160,6 +160,8 @@ async function main() {
           reservations: { where: { status: "ACTIVE" } },
           tradesProposed: { where: { status: "PENDING" } },
           tradesReceived: { where: { status: "PENDING" } },
+          questsCreated: { where: { status: { in: ["OPEN", "ACCEPTED"] } } },
+          questsAccepted: { where: { status: "ACCEPTED" } },
         },
       },
     },
@@ -167,9 +169,10 @@ async function main() {
   for (const user of bannedUsers) {
     const { sessions, listings, reservations, tradesProposed, tradesReceived } = user._count;
     const trades = tradesProposed + tradesReceived;
-    if (sessions > 0 || listings > 0 || reservations > 0 || trades > 0) {
+    const quests = user._count.questsCreated + user._count.questsAccepted;
+    if (sessions > 0 || listings > 0 || reservations > 0 || trades > 0 || quests > 0) {
       problems.push(
-        `Banned user ${user.id} still has ${sessions} sessions, ${listings} open listings, ${reservations} active reservations, ${trades} pending trades`,
+        `Banned user ${user.id} still has ${sessions} sessions, ${listings} open listings, ${reservations} active reservations, ${trades} pending trades, ${quests} active quests`,
       );
     }
   }
@@ -196,11 +199,51 @@ async function main() {
     _sum: { offeredGold: true },
   });
   const frozenByUser = new Map(pendingTrades.map((row) => [row.proposerId, row._sum.offeredGold ?? 0]));
+  // 进行中的委托（开放或已接单）也会冻结发布人的奖励 Gold
+  const openQuests = await prisma.quest.groupBy({
+    by: ["creatorId"],
+    where: { status: { in: ["OPEN", "ACCEPTED"] } },
+    _sum: { rewardGold: true },
+  });
+  for (const row of openQuests) {
+    frozenByUser.set(row.creatorId, (frozenByUser.get(row.creatorId) ?? 0) + (row._sum.rewardGold ?? 0));
+  }
   for (const wallet of wallets) {
     const expected = frozenByUser.get(wallet.userId) ?? 0;
     if (wallet.frozenBalance !== expected) {
       problems.push(
-        `Wallet ${wallet.userId}: frozenBalance ${wallet.frozenBalance} but pending trades offer ${expected}`,
+        `Wallet ${wallet.userId}: frozenBalance ${wallet.frozenBalance} but open trades and quests lock ${expected}`,
+      );
+    }
+  }
+
+  // 9. 委托必须自洽：
+  //    已接单（ACCEPTED）的必须有接单人和独占期限；开放（OPEN）的不能有接单人；
+  //    已完成（COMPLETED）的恰好有两条 QUEST_REWARD 流水（发布人付出、接单人收到），
+  //    其他状态一条都不能有。这条验证了"奖励只会发放一次"。
+  const [quests, rewardEntries] = await Promise.all([
+    prisma.quest.findMany({
+      select: { id: true, status: true, accepterId: true, acceptExpiresAt: true },
+    }),
+    prisma.ledgerEntry.groupBy({
+      by: ["refId"],
+      where: { type: "QUEST_REWARD" },
+      _count: { _all: true },
+    }),
+  ]);
+  const rewardCountByQuest = new Map(rewardEntries.map((row) => [row.refId, row._count._all]));
+  for (const quest of quests) {
+    if (quest.status === "ACCEPTED" && (!quest.accepterId || !quest.acceptExpiresAt)) {
+      problems.push(`Quest ${quest.id} is ACCEPTED but has no accepter or deadline`);
+    }
+    if (quest.status === "OPEN" && (quest.accepterId || quest.acceptExpiresAt)) {
+      problems.push(`Quest ${quest.id} is OPEN but still has an accepter`);
+    }
+    const expected = quest.status === "COMPLETED" ? 2 : 0;
+    const actual = rewardCountByQuest.get(quest.id) ?? 0;
+    if (actual !== expected) {
+      problems.push(
+        `Quest ${quest.id} is ${quest.status} but has ${actual} QUEST_REWARD ledger entries (expected ${expected})`,
       );
     }
   }

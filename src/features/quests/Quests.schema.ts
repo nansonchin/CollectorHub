@@ -1,5 +1,5 @@
 import z from "zod";
-import { MAX_OPEN_QUESTS, MAX_QUEST_QUANTITY, MAX_QUEST_REWARD } from "./Quests.config";
+import { MAX_OPEN_QUESTS, MAX_QUEST_QUANTITY, MAX_QUEST_REWARD } from "./quests.config";
 
 export const createQuestSchema=z.object({
     cardId:z.string().min(1),

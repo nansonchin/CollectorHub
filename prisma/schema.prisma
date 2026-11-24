@@ -124,6 +124,19 @@ enum TradeSide {
   REQUEST
 }
 
+// 委托的状态机：
+//   OPEN → ACCEPTED（有人接单，独占 24 小时）→ COMPLETED（接单人交付，奖励发放）
+//   ACCEPTED → OPEN（接单人放弃，或接单超时没交付）
+//   OPEN → CANCELLED（发布人撤销）/ EXPIRED（委托本身超过有效期）
+// 已被接单（ACCEPTED）的委托，发布人不能撤销：接单人正在为它准备。
+enum QuestStatus {
+  OPEN
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -141,6 +154,7 @@ model Card {
   listings    Listing[]
   orders      Order[]
   tradeItems  TradeItem[]
+  quests      Quest[]
 
   @@index([element])
   @@index([rarity])
@@ -399,6 +413,40 @@ model TradeItem {
   @@index([cardId])
 }
 
+// 委托：发布人（creator）说"我想要 quantity 张某卡，奖励 rewardGold"。
+//
+// 托管规则：创建时，发布人把奖励 Gold 冻结（frozenBalance）。
+// 接单人交付卡牌的那一刻，冻结的 Gold 才转给他。
+// 这样接单人交付之后，一定拿得到奖励：发布人不可能在这时候"花掉"这笔钱。
+//
+// 两个"期限"：
+//   expiresAt        委托本身的有效期（发布后多久没人完成就作废，奖励退还）
+//   acceptExpiresAt  接单后的独占期（接单人必须在这个时间前交付，否则委托重新开放）
+model Quest {
+  id              String      @id @default(cuid())
+  creatorId       String
+  cardId          String
+  quantity        Int
+  rewardGold      Int
+  status          QuestStatus @default(OPEN)
+  accepterId      String?
+  acceptedAt      DateTime?
+  acceptExpiresAt DateTime?
+  expiresAt       DateTime
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  creator         User        @relation("QuestCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  accepter        User?       @relation("QuestAccepter", fields: [accepterId], references: [id], onDelete: Restrict)
+  card            Card        @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([status, cardId]) // 委托板：按卡牌筛选
+  @@index([creatorId, status])
+  @@index([accepterId, status])
+  @@index([status, expiresAt]) // 过期扫描
+  @@index([status, acceptExpiresAt]) // 接单超时扫描
+}
+
 // ---------------------------------------------------------------------
 // 以下四张表是 Better Auth 需要的标准结构（账号、登录状态、验证码）。
 // 字段名由这个库规定，不要改名；以后需要的自定义字段（例如 role）
@@ -437,6 +485,8 @@ model User {
   adminActionsReceived AdminAction[] @relation("AdminActionTarget")
   tradesProposed      Trade[]       @relation("TradeProposer")
   tradesReceived      Trade[]       @relation("TradeRecipient")
+  questsCreated       Quest[]       @relation("QuestCreator")
+  questsAccepted      Quest[]       @relation("QuestAccepter")
 
   @@map("user")
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { QuestError, QuestErrorCode } from "./Quests.service";
+import { QuestError, QuestErrorCode } from "./quests.service";
 
 const STATUS_BY_CODE: Record<QuestErrorCode, number> = {
   INVALID_CARD: 400,

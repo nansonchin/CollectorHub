@@ -1,5 +1,5 @@
-import { questErrorResponse } from "@/src/features/quests/Quests.http";
-import { deliverQuest } from "@/src/features/quests/Quests.service";
+import { questErrorResponse } from "@/src/features/quests/quests.http";
+import { deliverQuest } from "@/src/features/quests/quests.service";
 import { getSession } from "@/src/lib/session";
 import { NextResponse } from "next/server";
 

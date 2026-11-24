@@ -4,7 +4,9 @@ import { prisma } from "@/src/lib/prisma";
 import { MAX_REPORTS_PER_DAY, ResolveActionId } from "./moderation.config";
 import { Tx } from "../economy/wallet.service";
 import { releaseAllTradesForUser } from "../trades/trades.service";
+import { releaseAllQuestsForUser } from "../quests/quests.service";
 
+// admin || moderator function reporting
 export type ModerationErrorCode =
   | "TARGET_NOT_FOUND"
   | "CANNOT_REPORT_SELF"
@@ -118,6 +120,7 @@ export async function banUser(tx: Tx, userId: string, reason: string) {
 
   await tx.session.deleteMany({ where: { userId } });
   await releaseAllTradesForUser(tx, userId);
+  await releaseAllQuestsForUser(tx, userId);
 
   const reservations = await tx.reservation.findMany({
     where: { buyerId: userId, status: "ACTIVE" },

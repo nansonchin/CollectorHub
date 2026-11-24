@@ -1,5 +1,5 @@
 import { expireStaleReservations } from "@/src/features/market/market.service";
-import { expireStaleQuests } from "@/src/features/quests/Quests.service";
+import { expireStaleQuests } from "@/src/features/quests/quests.service";
 import { expireStaleTrades } from "@/src/features/trades/trades.service";
 import { NextResponse } from "next/server";
 

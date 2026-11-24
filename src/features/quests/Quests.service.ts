@@ -1,11 +1,11 @@
 import { prisma } from "@/src/lib/prisma";
-import { CreateQuestInput } from "./Quests.schema";
+import { CreateQuestInput } from "./quests.schema";
 import {
   ACCEPT_HOLD_HOURS,
   MAX_ACTIVE_ACCEPTED,
   MAX_OPEN_QUESTS,
   QUEST_EXPIRY_DAYS,
-} from "./Quests.config";
+} from "./quests.config";
 import {
   applyLedger,
   freezeGold,
@@ -13,6 +13,7 @@ import {
   lockWallets,
   releaseGold,
   spendFrozenGold,
+  Tx,
 } from "../economy/wallet.service";
 import {
   giveCopies,
@@ -277,7 +278,7 @@ export async function tryExpireStaleQuests() {
   }
 }
 
-export async function releaseAllQuestForUser(tx: Tx, userId: string) {
+export async function releaseAllQuestsForUser(tx: Tx, userId: string) {
   const quests = await tx.quest.findMany({
     where: {
       OR: [

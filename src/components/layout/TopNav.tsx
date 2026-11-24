@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { href: "/market", label: "Market", icon: Store, enabled: true },
   { href: "/inventory", label: "Inventory", icon: Backpack, enabled: true },
   { href: "/orders", label: "Orders", icon: Receipt, enabled: true },
-  { href: "/quests", label: "Quests", icon: ScrollText, enabled: false },
+  { href: "/quests", label: "Quests", icon: ScrollText, enabled: true },
   { href: "/guild", label: "Guild", icon: Shield, enabled: false },
   { href: "/trades", label: "Trade", icon: ArrowLeftRight, enabled: true },
 ];
