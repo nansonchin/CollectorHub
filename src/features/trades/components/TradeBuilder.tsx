@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { formatCardNumber } from "../../cards/cards.meta";
 import { useState } from "react";
+import { MAX_TRADE_MESSAGE, TRADE_EXPIRY_HOURS } from "../trades.config";
 
 type CardOption = {
   cardId: string;

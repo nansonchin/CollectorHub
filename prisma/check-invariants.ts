@@ -23,9 +23,10 @@ async function main() {
 
   for (const wallet of wallets) {
     const ledger = ledgerByUser.get(wallet.userId) ?? 0;
-    if (wallet.balance !== ledger) {
+    // 冻结的 Gold 只是"暂时不能花"，仍然属于这个人，所以恒等式是：可用 + 冻结 = 流水之和
+    if (wallet.balance + wallet.frozenBalance !== ledger) {
       problems.push(
-        `Wallet ${wallet.userId}: balance ${wallet.balance} but ledger sums to ${ledger}`,
+        `Wallet ${wallet.userId}: balance ${wallet.balance} + frozen ${wallet.frozenBalance} but ledger sums to ${ledger}`,
       );
     }
     if (wallet.balance < 0 || wallet.frozenBalance < 0) {
@@ -45,6 +46,16 @@ async function main() {
   const listedByKey = new Map(
     openListings.map((row) => [`${row.sellerId}:${row.cardId}`, row._sum.quantity ?? 0]),
   );
+
+  // 等待中的交换提议里，发起人拿出来的卡也是被锁住的
+  const offeredInTrades = await prisma.tradeItem.findMany({
+    where: { side: "OFFER", trade: { status: "PENDING" } },
+    select: { cardId: true, quantity: true, trade: { select: { proposerId: true } } },
+  });
+  for (const item of offeredInTrades) {
+    const key = `${item.trade.proposerId}:${item.cardId}`;
+    listedByKey.set(key, (listedByKey.get(key) ?? 0) + item.quantity);
+  }
 
   for (const item of inventory) {
     const listed = listedByKey.get(`${item.userId}:${item.cardId}`) ?? 0;
@@ -147,15 +158,18 @@ async function main() {
           sessions: true,
           listings: { where: { status: { in: ["AVAILABLE", "RESERVED"] } } },
           reservations: { where: { status: "ACTIVE" } },
+          tradesProposed: { where: { status: "PENDING" } },
+          tradesReceived: { where: { status: "PENDING" } },
         },
       },
     },
   });
   for (const user of bannedUsers) {
-    const { sessions, listings, reservations } = user._count;
-    if (sessions > 0 || listings > 0 || reservations > 0) {
+    const { sessions, listings, reservations, tradesProposed, tradesReceived } = user._count;
+    const trades = tradesProposed + tradesReceived;
+    if (sessions > 0 || listings > 0 || reservations > 0 || trades > 0) {
       problems.push(
-        `Banned user ${user.id} still has ${sessions} sessions, ${listings} open listings, ${reservations} active reservations`,
+        `Banned user ${user.id} still has ${sessions} sessions, ${listings} open listings, ${reservations} active reservations, ${trades} pending trades`,
       );
     }
   }
@@ -172,6 +186,23 @@ async function main() {
   });
   for (const report of handled) {
     problems.push(`Report ${report.id} is ${report.status} but its handler is inconsistent`);
+  }
+
+  // 8. 冻结的 Gold 必须和等待中的交换对得上：
+  //    每个钱包的 frozenBalance = 他作为发起人的所有 PENDING 交换里 offeredGold 之和。
+  const pendingTrades = await prisma.trade.groupBy({
+    by: ["proposerId"],
+    where: { status: "PENDING" },
+    _sum: { offeredGold: true },
+  });
+  const frozenByUser = new Map(pendingTrades.map((row) => [row.proposerId, row._sum.offeredGold ?? 0]));
+  for (const wallet of wallets) {
+    const expected = frozenByUser.get(wallet.userId) ?? 0;
+    if (wallet.frozenBalance !== expected) {
+      problems.push(
+        `Wallet ${wallet.userId}: frozenBalance ${wallet.frozenBalance} but pending trades offer ${expected}`,
+      );
+    }
   }
 
   console.log(

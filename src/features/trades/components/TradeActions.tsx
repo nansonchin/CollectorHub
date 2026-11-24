@@ -20,7 +20,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 const buttonBase =
   "h-10 rounded-full px-5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-60";
 
-export function TradeAction({ tradeId, mode }: Props) {
+export function TradeActions({ tradeId, mode }: Props) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);

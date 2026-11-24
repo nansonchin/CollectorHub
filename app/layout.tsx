@@ -5,6 +5,7 @@ import { ReactNode } from "react";
 import "./globals.css";
 import { getSession } from "@/src/lib/session";
 import { getWalletBalance } from "@/src/features/economy/economy.service";
+import { countIncomingTrades } from "@/src/features/trades/trades.service";
 
 const syne = Syne({ variable: "--font-syne", subsets: ["latin"] });
 const figtree = Figtree({ variable: "--font-figtree", subsets: ["latin"] });
@@ -20,8 +21,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const session = await getSession();
-  const gold = session ? await getWalletBalance(session.user.id) : 0;
 
+  const [gold, incomingTrades] =session? await Promise.all([
+    getWalletBalance(session.user.id),
+    countIncomingTrades(session.user.id)
+  ]) :([0,0])
   return (
     <html lang="en">
       <body
@@ -31,7 +35,7 @@ export default async function RootLayout({
           <TopNav
             user={
               session
-                ? { name: session.user.name, gold, role: session.user.role }
+                ? { name: session.user.name, gold, role: session.user.role, incomingTrades }
                 : null
             }
           />{" "}

@@ -4,6 +4,7 @@ import { Stars } from "@/src/features/reviews/components/Stars";
 import { REVIEW_TAG_LABELS, ReviewTagId } from "@/src/features/reviews/reviews.config";
 import { formatDateML } from "@/src/lib/date";
 import { getSession } from "@/src/lib/session";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 type Props = { params: Promise<{ id: string }> };
@@ -84,11 +85,20 @@ export default async function PlayerPage({ params }: Props) {
                         {review.reviewer.name} · {formatDateML(review.createdAt)}
                       </p>
                       {viewerId && review.reviewer.id !== viewerId && (
-                        <ReportDialog
+                        <>
+                        <Link href={
+                          `/trades/new?to=${user.id}`
+                        }
+                        className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white hover:bg-ink/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                        >
+                        Propose a trade
+                        </Link>
+                          <ReportDialog
                           targetType="REVIEW"
                           targetId={review.id}
                           subject="this review"
                         />
+                        </>
                       )}
                     </div>
                   </div>

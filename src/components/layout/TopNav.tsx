@@ -19,22 +19,36 @@ const NAV_ITEMS = [
   { href: "/collection", label: "Collection", icon: LayoutGrid, enabled: true },
   { href: "/market", label: "Market", icon: Store, enabled: true },
   { href: "/inventory", label: "Inventory", icon: Backpack, enabled: true },
-    { href: "/orders", label: "Orders", icon: Receipt, enabled: true },
+  { href: "/orders", label: "Orders", icon: Receipt, enabled: true },
   { href: "/quests", label: "Quests", icon: ScrollText, enabled: false },
   { href: "/guild", label: "Guild", icon: Shield, enabled: false },
-  { href: "/trade", label: "Trade", icon: ArrowLeftRight, enabled: false },
+  { href: "/trades", label: "Trade", icon: ArrowLeftRight, enabled: true },
 ];
 
-const ADMIN_ITEM = { href: "/admin", label: "Admin", icon: ShieldCheck, enabled: true };
+const ADMIN_ITEM = {
+  href: "/admin",
+  label: "Admin",
+  icon: ShieldCheck,
+  enabled: true,
+};
 
 const itemBase =
   "flex h-11 shrink-0 items-center gap-2 border-b-[3px] px-3 text-sm font-semibold";
 
-export function TopNav({ user }: {   user: { name: string; gold: number; role: "PLAYER" | "MODERATOR" | "ADMIN" } | null;}) {
-  
+export function TopNav({
+  user,
+}: {
+  user: {
+    name: string;
+    gold: number;
+    role: "PLAYER" | "MODERATOR" | "ADMIN";
+    incomingTrades: number;
+  } | null;
+}) {
   const pathname = usePathname();
-  const navItems= user && user.role !=="PLAYER"?[...NAV_ITEMS,ADMIN_ITEM]:NAV_ITEMS;
-  
+  const navItems =
+    user && user.role !== "PLAYER" ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
+
   return (
     <header className="relative z-20 flex items-center gap-3 rounded-[28px] bg-white px-4 shadow-soft sm:gap-5 sm:px-6">
       <Link href="/" className="flex shrink-0 items-center gap-2.5 py-3">
@@ -80,6 +94,12 @@ export function TopNav({ user }: {   user: { name: string; gold: number; role: "
             >
               <Icon size={18} aria-hidden />
               {label}
+              {href === "/trades" && user && user.incomingTrades > 0 && (
+                <span className="grid min-w-5 place-items-center rounded-full bg-gold-500 px-1.5 text-xs font-bold text-white">
+                  {user.incomingTrades}
+                  <span className="sr-only"> offers waiting</span>
+                </span>
+              )}
             </Link>
           );
         })}
@@ -117,7 +137,9 @@ export function TopNav({ user }: {   user: { name: string; gold: number; role: "
             >
               {user.name.trim().charAt(0).toUpperCase() || "?"}
             </span>
-            <span className="hidden max-w-28 truncate sm:inline">{user.name}</span>
+            <span className="hidden max-w-28 truncate sm:inline">
+              {user.name}
+            </span>
           </Link>
         ) : (
           <Link
