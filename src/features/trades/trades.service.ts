@@ -10,10 +10,18 @@ import {
 } from "../economy/wallet.service";
 import { CreateTradeInput } from "./trades.schema";
 import { MAX_OPEN_TRADES, TRADE_EXPIRY_HOURS } from "./trades.config";
-import { giveCopies, lockCopies, lockInventoryRows, takeAvailableCopies, takeLockedCopies, unlockCopies } from "../economy/inventory.service";
+import {
+  giveCopies,
+  lockCopies,
+  lockInventoryRows,
+  takeAvailableCopies,
+  takeLockedCopies,
+  unlockCopies,
+} from "../economy/inventory.service";
 import { PrismaClient } from "@/generated/prisma/internal/class";
 import { GlobalOmitConfig } from "@/generated/prisma/internal/prismaNamespace";
 import { DefaultArgs } from "@prisma/client/runtime/client";
+import { notify, userName } from "../notifications/notifications.service";
 
 export type TradeErrorCode =
   | "RECIPIENT_NOT_FOUND"
@@ -105,13 +113,18 @@ export async function createTrade(proposerId: string, input: CreateTradeInput) {
       a.cardId.localeCompare(b.cardId),
     );
     for (const item of sorted) {
-      const locked = await lockCopies(tx, proposerId, item.cardId, item.quantity);
+      const locked = await lockCopies(
+        tx,
+        proposerId,
+        item.cardId,
+        item.quantity,
+      );
       if (!locked) {
         throw new TradeError("NOT_ENOUGH_COPIES");
       }
     }
 
-    return tx.trade.create({
+    const trade = await tx.trade.create({
       data: {
         proposerId,
         recipientId,
@@ -130,6 +143,14 @@ export async function createTrade(proposerId: string, input: CreateTradeInput) {
         },
       },
     });
+
+    await notify(tx, {
+      userId: recipientId,
+      type: "TRADE_OFFER_RECEIVED",
+      data: { tradeId: trade.id, fromName: await userName(tx, proposerId) },
+    });
+
+    return trade;
   });
 }
 
@@ -225,6 +246,15 @@ export async function acceptTrade(recipientId: string, tradeId: string) {
       await giveCopies(tx, trade.proposerId, item.cardId, item.quantity);
     }
 
+    await notify(tx, {
+      userId: trade.proposerId,
+      type: "TRADE_ACCEPTED",
+      data: {
+        tradeId: trade.id,
+        byName: await userName(tx, trade.recipientId),
+      },
+    });
+
     return { id: trade.id };
   });
 }
@@ -254,6 +284,25 @@ async function closeTrade(
     if (count === 0) throw new TradeError("TRADE_NOT_AVAILABLE");
 
     await releaseProposerLocks(tx, trade);
+    if (newStatus === "REJECTED") {
+      await notify(tx, {
+        userId: trade.proposerId,
+        type: "TRADE_REJECTED",
+        data: {
+          tradeId: trade.id,
+          byName: await userName(tx, trade.recipientId),
+        },
+      });
+    } else {
+      await notify(tx, {
+        userId: trade.recipientId,
+        type: "TRADE_CANCELLED",
+        data: {
+          tradeId: trade.id,
+          byName: await userName(tx, trade.proposerId),
+        },
+      });
+    }
     return { id: trade.id };
   });
 }
@@ -264,44 +313,52 @@ export const cancelTrade = (proposerId: string, tradeId: string) =>
 export const rejectTrade = (recipientId: string, tradeId: string) =>
   closeTrade(tradeId, { role: "recipient", userId: recipientId }, "REJECTED");
 
-    export async function expireStaleTrades() {
-    const stale = await prisma.trade.findMany({
-        where: { status: "PENDING", expiresAt: { lte: new Date() } },
-        select: { id: true },
-        orderBy: { id: "asc" },
+export async function expireStaleTrades() {
+  const stale = await prisma.trade.findMany({
+    where: { status: "PENDING", expiresAt: { lte: new Date() } },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+
+  let expired = 0;
+  for (const { id } of stale) {
+    const done = await prisma.$transaction(async (tx) => {
+      const trade = await tx.trade.findUnique({
+        where: { id },
+        include: {
+          items: true,
+        },
+      });
+
+      if (!trade) {
+        return false;
+      }
+
+      await lockWallets(tx, [trade.proposerId]);
+
+      const { count } = await tx.trade.updateMany({
+        where: { id, status: "PENDING", expiresAt: { lte: new Date() } },
+        data: { status: "EXPIRED", respondedAt: new Date() },
+      });
+
+      if (count === 0) {
+        return false;
+      }
+      await releaseProposerLocks(tx, trade);
+      await notify(tx, {
+        userId: trade.proposerId,
+        type: "TRADE_EXPIRED",
+        data: {
+          tradeId: trade.id,
+          toName: await userName(tx, trade.recipientId),
+        },
+      });
+      return true;
     });
-
-    let expired = 0;
-    for (const { id } of stale) {
-        const done = await prisma.$transaction(async (tx) => {
-        const trade = await tx.trade.findUnique({
-            where: { id },
-            include: {
-            items: true,
-            },
-        });
-
-        if (!trade) {
-            return false;
-        }
-
-        await lockWallets(tx, [trade.proposerId]);
-
-        const { count } = await tx.trade.updateMany({
-            where: { id, status: "PENDING", expiresAt: { lte: new Date() } },
-            data: { status: "EXPIRED", respondedAt: new Date() },
-        });
-
-        if (count === 0) {
-            return false;
-        }
-        await releaseProposerLocks(tx, trade);
-        return true;
-        });
-        if (done) expired += 1;
-    }
-    return expired;
-    }
+    if (done) expired += 1;
+  }
+  return expired;
+}
 
 export async function tryExpireStaleTime() {
   try {
@@ -415,4 +472,3 @@ export async function getTradeBuilderData(userId: string, otherId: string) {
     theirCards: theirs.map(toOption).filter((card) => card.available > 0),
   };
 }
-

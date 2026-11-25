@@ -5,6 +5,7 @@ import { MAX_REPORTS_PER_DAY, ResolveActionId } from "./moderation.config";
 import { Tx } from "../economy/wallet.service";
 import { releaseAllTradesForUser } from "../trades/trades.service";
 import { releaseAllQuestsForUser } from "../quests/quests.service";
+import { notify } from "../notifications/notifications.service";
 
 // admin || moderator function reporting
 export type ModerationErrorCode =
@@ -220,6 +221,13 @@ export async function resolveReport(
         break;
       case "BAN_USER":
         await banUser(tx, report.targetUserId, message!);
+        break;
+      case "WARN_USER":
+        await notify(tx, {
+          userId: report.targetUserId,
+          type: "MODERATION_WARNING",
+          data: { message: message! },
+        });
         break;
     }
 

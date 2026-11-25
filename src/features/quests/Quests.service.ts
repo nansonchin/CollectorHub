@@ -22,6 +22,11 @@ import {
 } from "../economy/inventory.service";
 import { ListCardsQuery } from "../cards/cards.schema";
 import { buildCardWhere } from "../cards/cards.service";
+import {
+  cardName,
+  notify,
+  userName,
+} from "../notifications/notifications.service";
 
 export type QuestErrorCode =
   | "INVALID_CARD"
@@ -144,17 +149,45 @@ export async function acceptQuest(accepterId: string, questId: string) {
     });
     if (count === 0) throw new QuestError("QUEST_NOT_AVAILABLE");
 
+    await notify(tx, {
+      userId: quest.creatorId,
+      type: "QUEST_ACCEPTED",
+      data: {
+        questId,
+        cardName: await cardName(tx, quest.cardId),
+        quantity: quest.quantity,
+        byName: await userName(tx, accepterId),
+      },
+    });
     return { id: questId };
   });
 }
 
 export async function abandonQuest(accepterId: string, questId: string) {
-  const { count } = await prisma.quest.updateMany({
-    where: { id: questId, accepterId, status: "ACCEPTED" },
-    data: REOPEN_DATA,
+  return prisma.$transaction(async (tx) => {
+    const quest = await tx.quest.findFirst({
+      where: { id: questId, accepterId, status: "ACCEPTED" },
+    });
+    if (!quest) throw new QuestError("QUEST_NOT_AVAILABLE");
+
+    const { count } = await tx.quest.updateMany({
+      where: { id: questId, accepterId, status: "ACCEPTED" },
+      data: REOPEN_DATA,
+    });
+    if (count === 0) throw new QuestError("QUEST_NOT_AVAILABLE");
+    await notify(tx, {
+      userId: quest.creatorId,
+      type: "QUEST_REOPENED",
+      data: {
+        questId,
+        reason: "abandoned",
+        cardName: await cardName(tx, quest.cardId),
+        quantity: quest.quantity,
+        byName: await userName(tx, accepterId),
+      },
+    });
+    return { id: questId };
   });
-  if (count === 0) throw new QuestError("QUEST_NOT_AVAILABLE");
-  return { id: questId };
 }
 
 export async function deliverQuest(accepterId: string, questId: string) {
@@ -202,16 +235,64 @@ export async function deliverQuest(accepterId: string, questId: string) {
       ...ref,
     });
 
+    await notify(tx, {
+      userId: quest.creatorId,
+      type: "QUEST_DELIVERED",
+      data: {
+        questId: quest.id,
+        cardName: await cardName(tx, quest.cardId),
+        quantity: quest.quantity,
+        reward: quest.rewardGold,
+        byName: await userName(tx, accepterId),
+      },
+    });
+
     return { id: quest.id };
   });
 }
 
 async function reopenTimedOutAcceptances() {
-  const { count } = await prisma.quest.updateMany({
+  const stale = await prisma.quest.findMany({
     where: { status: "ACCEPTED", acceptExpiresAt: { lte: new Date() } },
-    data: REOPEN_DATA,
+    select: { id: true },
+    orderBy: { id: "asc" },
   });
-  return count;
+
+  let reopened = 0;
+  for (const { id } of stale) {
+    const done = await prisma.$transaction(async (tx) => {
+
+      const quest = await tx.quest.findUnique({ where: { id } });
+      if (!quest || !quest.accepterId) return false;
+
+      const { count } = await tx.quest.updateMany({
+        where: { id, status: "ACCEPTED", acceptExpiresAt: { lte: new Date() } },
+        data: REOPEN_DATA,
+      });
+      if (count === 0) return false; 
+
+      const name = await cardName(tx, quest.cardId);
+      await notify(tx, {
+        userId: quest.accepterId,
+        type: "QUEST_HOLD_EXPIRED",
+        data: { questId: id, cardName: name, quantity: quest.quantity },
+      });
+      await notify(tx, {
+        userId: quest.creatorId,
+        type: "QUEST_REOPENED",
+        data: {
+          questId: id,
+          reason: "timed_out",
+          cardName: name,
+          quantity: quest.quantity,
+          byName: await userName(tx, quest.accepterId),
+        },
+      });
+      return true;
+    });
+    if (done) reopened += 1;
+  }
+  return reopened;
 }
 
 async function expireOpenQuests() {
@@ -236,6 +317,18 @@ async function expireOpenQuests() {
       if (count === 0) return false;
 
       await releaseGold(tx, quest.creatorId, quest.rewardGold);
+
+      await notify(tx, {
+        userId: quest.creatorId,
+        type: "QUEST_EXPIRED",
+        data: {
+          questId: id,
+          cardName: await cardName(tx, quest.cardId),
+          quantity: quest.quantity,
+          reward: quest.rewardGold,
+        },
+      });
+      
       return true;
     });
     if (done) expired += 1;

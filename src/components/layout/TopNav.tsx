@@ -43,6 +43,7 @@ export function TopNav({
     gold: number;
     role: "PLAYER" | "MODERATOR" | "ADMIN";
     incomingTrades: number;
+    unreadNotifications: number; 
   } | null;
 }) {
   const pathname = usePathname();
@@ -117,14 +118,29 @@ export function TopNav({
             {user.gold.toLocaleString("en-US")}
           </Link>
         )}
-        <button
-          type="button"
-          disabled
-          aria-label="Notifications"
-          className="grid size-10 place-items-center rounded-full text-mute/60"
-        >
-          <Bell size={18} aria-hidden />
-        </button>
+       {
+        user &&(
+          <Link
+            href="/notifications"
+             aria-label={
+              user.unreadNotifications > 0
+                ? `Notifications, ${user.unreadNotifications} unread`
+                : "Notifications"
+            }
+            className="relative grid size-10 place-items-center rounded-full hover:bg-gold-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+          >
+              <Bell size={18} aria-hidden />
+            {user.unreadNotifications > 0 && (
+              <span
+                aria-hidden
+                className="absolute right-0.5 top-0.5 grid min-w-4 place-items-center rounded-full bg-gold-500 px-1 text-[10px] font-bold leading-4 text-white"
+              >
+                {user.unreadNotifications > 9 ? "9+" : user.unreadNotifications}
+              </span>
+            )}
+          </Link>
+        )
+       }
         {user ? (
           <Link
             href="/account"

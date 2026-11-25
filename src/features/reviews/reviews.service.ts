@@ -1,5 +1,6 @@
 import { prisma } from "@/src/lib/prisma";
 import { CreateReviewInput } from "./reviews.schema";
+import { notify, userName } from "../notifications/notifications.service";
 
 export type ReviewErrorCode = "ORDER_NOT_FOUND" | "ALREADY_REVIEWED";
 
@@ -17,13 +18,10 @@ export async function createReview(
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
 
-  // 不是这笔订单的买家或卖家，就当作"订单不存在"：
-  // 不告诉陌生人"这个订单号存在，只是和你无关"。
   if (!order || (order.buyerId !== reviewerId && order.sellerId !== reviewerId)) {
     throw new ReviewError("ORDER_NOT_FOUND");
   }
 
-  // 被评的人由订单决定，不由客户端决定：评价者是买家，对方就是卖家，反之亦然。
   const targetId = order.buyerId === reviewerId ? order.sellerId : order.buyerId;
 
   const { count } = await prisma.review.createMany({
@@ -41,6 +39,19 @@ export async function createReview(
   });
 
   if (count === 0) throw new ReviewError("ALREADY_REVIEWED");
+    try {
+    await notify(prisma, {
+      userId: targetId,
+      type: "REVIEW_RECEIVED",
+      data: {
+        orderId,
+        rating: input.rating,
+        reviewerName: await userName(prisma, reviewerId),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to notify about a new review:", error);
+  }
 }
 
 export async function getSellerRatings(sellerIds: string[]) {

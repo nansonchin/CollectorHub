@@ -10,6 +10,7 @@ import { ListCardsQuery } from "../cards/cards.schema";
 import { buildCardWhere } from "../cards/cards.service";
 import { MAX_ACTIVE_RESERVATIONS, RESERVATION_HOURS } from "./market.config";
 import { getSellerRatings } from "../reviews/reviews.service";
+import { cardName, notify, userName } from "../notifications/notifications.service";
 
 export type MarketErrorCode =
   | "NOT_ENOUGH_COPIES"
@@ -85,7 +86,7 @@ async function expireReservations(tx: Tx, scope: { listingId?: string } = {}) {
       expiresAt: { lte: now },
       ...(scope.listingId && { listingId: scope.listingId }),
     },
-    select: { id: true, listingId: true },
+    select: { id: true, listingId: true, buyerId: true },
     orderBy: { id: "asc" },
   });
 
@@ -101,6 +102,18 @@ async function expireReservations(tx: Tx, scope: { listingId?: string } = {}) {
         where: { id: reservation.listingId, status: "RESERVED" },
         data: { status: "AVAILABLE" },
       });
+      const expiredListing = await tx.listing.findUnique({
+        where: { id: reservation.listingId },
+        select: { cardId: true },
+      });
+
+      if (expiredListing) {
+        await notify(tx, {
+          userId: reservation.buyerId,
+          type: "RESERVATION_EXPIRED",
+          data: { cardName: await cardName(tx, expiredListing.cardId) },
+        });
+      }
       expired += 1;
     }
   }
@@ -155,6 +168,12 @@ export async function reserveListing(buyerId: string, listingId: string) {
           : "LISTING_NOT_AVAILABLE",
       );
     }
+
+    await notify(tx, {
+      userId: listing.sellerId,
+      type: "LISTING_RESERVED",
+      data: { cardName: await cardName(tx, listing.cardId) },
+    });
 
     return tx.reservation.create({
       data: {
@@ -255,6 +274,18 @@ export async function purchaseListing(buyerId: string, listingId: string) {
     });
     const ref = { refType: "Order", refId: order.id };
 
+      await notify(tx, {
+      userId: listing.sellerId,
+      type: "LISTING_SOLD",
+      data: {
+        orderId: order.id,
+        cardName: await cardName(tx, listing.cardId),
+        quantity: listing.quantity,
+        net: totalPrice - fee,
+        buyerName: await userName(tx, buyerId),
+      },
+    });
+
     try {
       await applyLedger(tx, {
         userId: buyerId,
@@ -342,7 +373,7 @@ export async function listMarketListings(query: ListCardsQuery) {
   };
 
   const [items, total] = await Promise.all([
-       prisma.listing.findMany({
+    prisma.listing.findMany({
       where,
       include: {
         card: true,
@@ -360,11 +391,10 @@ export async function listMarketListings(query: ListCardsQuery) {
     prisma.listing.count({ where }),
   ]);
 
-  const ratings =await getSellerRatings(items.map((item)=>item.sellerId))
-
+  const ratings = await getSellerRatings(items.map((item) => item.sellerId));
 
   return {
-      items: items.map((item) => ({
+    items: items.map((item) => ({
       ...item,
       sellerRating: ratings.get(item.sellerId) ?? null,
     })),
@@ -385,6 +415,6 @@ export async function listMyOrders(userId: string) {
       reviews: { where: { reviewerId: userId }, select: { rating: true } },
     },
     orderBy: { createdAt: "desc" },
-    take: 50, 
+    take: 50,
   });
 }

@@ -10,7 +10,7 @@ export function MarkAllReadButton() {
   async function handleClick() {
     setPending(true);
     try {
-      await fetch("/api/notification/read-all", {
+      await fetch("/api/notifications/read-all", {
         method: "POST",
       });
     } finally {
