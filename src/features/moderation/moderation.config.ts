@@ -14,7 +14,7 @@ export const REPORT_REASON_LABELS: Record<ReportReasonId, string> = {
   OTHER: "Something else",
 };
 
-export const REPORT_TARGET_TYPES = ["LISTING", "USER", "REVIEW"] as const;
+export const REPORT_TARGET_TYPES = ["LISTING", "USER", "REVIEW", "MESSAGE"] as const;
 export type ReportTargetTypeId = (typeof REPORT_TARGET_TYPES)[number];
 
 export const MAX_REPORT_DETAILS = 500;
