@@ -8,6 +8,7 @@ import {
   Bell,
   Coins,
   LayoutGrid,
+  MessageSquare,
   Receipt,
   ScrollText,
   Shield,
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/quests", label: "Quests", icon: ScrollText, enabled: true },
   { href: "/guild", label: "Guild", icon: Shield, enabled: false },
   { href: "/trades", label: "Trade", icon: ArrowLeftRight, enabled: true },
+   { href: "/messages", label: "Messages", icon: MessageSquare, enabled: true },
 ];
 
 const ADMIN_ITEM = {
@@ -44,6 +46,7 @@ export function TopNav({
     role: "PLAYER" | "MODERATOR" | "ADMIN";
     incomingTrades: number;
     unreadNotifications: number; 
+    unreadMessages: number; 
   } | null;
 }) {
   const pathname = usePathname();
@@ -99,6 +102,12 @@ export function TopNav({
                 <span className="grid min-w-5 place-items-center rounded-full bg-gold-500 px-1.5 text-xs font-bold text-white">
                   {user.incomingTrades}
                   <span className="sr-only"> offers waiting</span>
+                </span>
+              )}
+                {href === "/messages" && user && user.unreadMessages > 0 && (
+                <span className="grid min-w-5 place-items-center rounded-full bg-gold-500 px-1.5 text-xs font-bold text-white">
+                  {user.unreadMessages > 99 ? "99+" : user.unreadMessages}
+                  <span className="sr-only"> unread messages</span>
                 </span>
               )}
             </Link>

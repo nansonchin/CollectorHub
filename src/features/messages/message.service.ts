@@ -1,6 +1,6 @@
 import { prisma } from "@/src/lib/prisma";
-import { SendMessageInput } from "./messages.schema";
 import { MAX_MESSAGES_PER_MINUTE, PREVIEW_LENGTH } from "./messages.config";
+import type { SendMessageInput } from "./messages.schema";
 
 export type MessageErrorCode =
   | "USER_NOT_FOUND"
@@ -13,7 +13,7 @@ export type MessageErrorCode =
 export class MessageError extends Error {
   constructor(public readonly code: MessageErrorCode) {
     super(code);
-    this.name = "Message Error";
+    this.name = "MessageError";
   }
 }
 
@@ -44,45 +44,28 @@ export function toClientMessage(message: {
 
 async function requireMembership(userId: string, conversationId: string) {
   const member = await prisma.conversationMember.findUnique({
-    where: {
-      conversationId_userId: { conversationId, userId },
-    },
+    where: { conversationId_userId: { conversationId, userId } },
   });
-
-  if (!member) {
-    throw new MessageError("CONVERSATION_NOT_FOUND");
-  }
-
+  if (!member) throw new MessageError("CONVERSATION_NOT_FOUND");
   return member;
 }
 
-export async function getOrCreateDirectConversation(
-  userId: string,
-  otherId: string,
-) {
-  if (otherId === userId) {
-    throw new MessageError("CANNOT_MESSAGE_SELF");
-  }
+export async function getOrCreateDirectConversation(userId: string, otherId: string) {
+  if (otherId === userId) throw new MessageError("CANNOT_MESSAGE_SELF");
 
   const other = await prisma.user.findUnique({
-    where: {
-      id: otherId,
-    },
+    where: { id: otherId },
+    select: { id: true, bannedAt: true },
   });
-  if (!other || other.bannedAt) {
-    throw new MessageError("USER_NOT_FOUND");
-  }
+  if (!other || other.bannedAt) throw new MessageError("USER_NOT_FOUND");
 
   const [low, high] = [userId, otherId].sort();
   const directKey = `${low}:${high}`;
 
-  const existing = await prisma.conversation.findUnique({
-    where: { directKey },
-  });
+  const existing = await prisma.conversation.findUnique({ where: { directKey } });
   if (existing) return existing.id;
 
   const id = crypto.randomUUID();
-
   await prisma.$transaction(async (tx) => {
     const { count } = await tx.conversation.createMany({
       data: [{ id, type: "DIRECT", directKey }],
@@ -97,9 +80,8 @@ export async function getOrCreateDirectConversation(
       });
     }
   });
-  const conversation = await prisma.conversation.findUniqueOrThrow({
-    where: { directKey },
-  });
+
+  const conversation = await prisma.conversation.findUniqueOrThrow({ where: { directKey } });
   return conversation.id;
 }
 
@@ -114,15 +96,12 @@ export async function sendMessage(
     where: { conversationId, userId: { not: senderId } },
     include: { user: { select: { bannedAt: true } } },
   });
-  if (!other || other.user.bannedAt)
-    throw new MessageError("RECIPIENT_UNAVAILABLE");
+  if (!other || other.user.bannedAt) throw new MessageError("RECIPIENT_UNAVAILABLE");
 
   const recent = await prisma.message.count({
     where: { senderId, createdAt: { gte: new Date(Date.now() - 60_000) } },
   });
-
-  if (recent >= MAX_MESSAGES_PER_MINUTE)
-    throw new MessageError("MESSAGE_RATE_LIMIT");
+  if (recent >= MAX_MESSAGES_PER_MINUTE) throw new MessageError("MESSAGE_RATE_LIMIT");
 
   let body: string | null = null;
   let cardId: string | null = null;
@@ -144,16 +123,18 @@ export async function sendMessage(
   }
 
   return prisma.$transaction(async (tx) => {
+   
     await tx.$executeRaw`
       UPDATE "Conversation"
       SET "lastMessageAt" = NOW(), "lastMessagePreview" = ${preview}
       WHERE "id" = ${conversationId}
-      `;
+    `;
 
     const message = await tx.message.create({
       data: { conversationId, senderId, type: input.type, body, cardId },
       include: messageInclude,
     });
+
     await tx.$executeRaw`
       UPDATE "ConversationMember"
       SET "unreadCount" = CASE WHEN "userId" = ${senderId} THEN 0 ELSE "unreadCount" + 1 END,
@@ -165,16 +146,12 @@ export async function sendMessage(
   });
 }
 
-export async function markConversationRead(
-  userId: string,
-  conversationId: string,
-) {
+export async function markConversationRead(userId: string, conversationId: string) {
   const updated = await prisma.$executeRaw`
-        UPDATE "ConversationMember"
+    UPDATE "ConversationMember"
     SET "unreadCount" = 0, "lastReadAt" = NOW()
     WHERE "conversationId" = ${conversationId} AND "userId" = ${userId}
-    `;
-
+  `;
   if (updated === 0) throw new MessageError("CONVERSATION_NOT_FOUND");
 }
 
@@ -208,10 +185,7 @@ export async function getThread(userId: string, conversationId: string) {
   const member = await prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
   });
-
-  if (!member) {
-    return null;
-  }
+  if (!member) return null;
 
   const other = await prisma.conversationMember.findFirst({
     where: { conversationId, userId: { not: userId } },
@@ -220,13 +194,10 @@ export async function getThread(userId: string, conversationId: string) {
   if (!other) return null;
 
   const messages = await listMessages(userId, conversationId);
+
   return {
     conversationId,
-    other: {
-      id: other.user.id,
-      name: other.user.name,
-      banned: other.user.bannedAt !== null,
-    },
+    other: { id: other.user.id, name: other.user.name, banned: other.user.bannedAt !== null },
     messages,
   };
 }
@@ -241,9 +212,7 @@ export async function listConversations(userId: string) {
           lastMessagePreview: true,
           members: {
             where: { userId: { not: userId } },
-            select: {
-              user: { select: { id: true, name: true, bannedAt: true } },
-            },
+            select: { user: { select: { id: true, name: true, bannedAt: true } } },
           },
         },
       },
@@ -267,4 +236,11 @@ export async function countUnreadMessages(userId: string) {
     _sum: { unreadCount: true },
   });
   return result._sum.unreadCount ?? 0;
+}
+
+export async function listShareableCards() {
+  return prisma.card.findMany({
+    select: { id: true, name: true, number: true },
+    orderBy: { number: "asc" },
+  });
 }

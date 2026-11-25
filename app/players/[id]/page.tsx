@@ -1,3 +1,4 @@
+import { MessageButton } from "@/src/features/messages/components/MessageButton";
 import { ReportDialog } from "@/src/features/moderation/components/ReportDialog";
 import { getPlayerProfile } from "@/src/features/players/players.service";
 import { Stars } from "@/src/features/reviews/components/Stars";
@@ -47,6 +48,8 @@ export default async function PlayerPage({ params }: Props) {
                 >
                   Propose a trade
                 </Link>
+                          <MessageButton userId={user.id} />
+
                 <ReportDialog
                   targetType="USER"
                   targetId={user.id}

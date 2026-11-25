@@ -47,21 +47,29 @@ export async function createReport(
       select: { id: true },
     });
     targetUserId = user?.id ?? null;
-  } else {
+  } else if (targetType === "REVIEW") {
     const review = await prisma.review.findUnique({
       where: { id: targetId },
       select: { reviewerId: true },
     });
     targetUserId = review?.reviewerId ?? null;
-  }
+  } else {
+    const message = await prisma.message.findUnique({
+      where: { id: targetId },
+      select: {
+        senderId: true,
+        conversation: { select: { members: { select: { userId: true } } } },
+      },
+    });
 
-  if (!targetUserId) {
-    throw new ModerationError("TARGET_NOT_FOUND");
+    const isMember = message?.conversation.members.some(
+      (m) => m.userId === reporterId,
+    );
+    targetUserId = message && isMember ? message.senderId : null;
   }
-
-  if (targetUserId === reporterId) {
+  if (!targetUserId) throw new ModerationError("TARGET_NOT_FOUND");
+  if (targetUserId === reporterId)
     throw new ModerationError("CANNOT_REPORT_SELF");
-  }
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const recent = await prisma.report.count({
@@ -299,16 +307,16 @@ export type TargetSummary =
     }
   | { kind: "USER" }
   | { kind: "REVIEW"; rating: number; comment: string | null; hidden: boolean }
+   | { kind: "MESSAGE"; body: string | null; type: string }
   | { kind: "MISSING" };
+
 export async function listOpenReports() {
   const reports = await prisma.report.findMany({
     where: { status: "OPEN" },
     orderBy: { createdAt: "asc" },
     include: {
       reporter: { select: { name: true } },
-      targetUser: {
-        select: { id: true, name: true, role: true, bannedAt: true },
-      },
+      targetUser: { select: { id: true, name: true, role: true, bannedAt: true } },
     },
   });
 
@@ -316,7 +324,7 @@ export async function listOpenReports() {
     reports.filter((r) => r.targetType === type).map((r) => r.targetId);
   const userIds = [...new Set(reports.map((r) => r.targetUserId))];
 
-  const [listings, reviews, totals] = await Promise.all([
+  const [listings, reviews, messages, totals] = await Promise.all([
     prisma.listing.findMany({
       where: { id: { in: idsOf("LISTING") } },
       select: {
@@ -331,7 +339,10 @@ export async function listOpenReports() {
       where: { id: { in: idsOf("REVIEW") } },
       select: { id: true, rating: true, comment: true, hiddenAt: true },
     }),
-    // 这个人一共被举报过几次（包括已处理的），帮助判断他是不是惯犯
+    prisma.message.findMany({
+      where: { id: { in: idsOf("MESSAGE") } },
+      select: { id: true, body: true, type: true },
+    }),
     prisma.report.groupBy({
       by: ["targetUserId"],
       where: { targetUserId: { in: userIds } },
@@ -341,6 +352,7 @@ export async function listOpenReports() {
 
   const listingById = new Map(listings.map((l) => [l.id, l]));
   const reviewById = new Map(reviews.map((r) => [r.id, r]));
+  const messageById = new Map(messages.map((m) => [m.id, m]));
   const totalByUser = new Map(
     totals.map((t) => [t.targetUserId, t._count._all]),
   );
@@ -369,6 +381,10 @@ export async function listOpenReports() {
           hidden: review.hiddenAt !== null,
         };
       }
+    } else if (report.targetType === "MESSAGE") {
+      const message = messageById.get(report.targetId);
+      if (message)
+        target = { kind: "MESSAGE", body: message.body, type: message.type };
     } else {
       target = { kind: "USER" };
     }

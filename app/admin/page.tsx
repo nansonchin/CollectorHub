@@ -54,6 +54,16 @@ function TargetBlock({ target }: { target: TargetSummary }) {
       </div>
     );
   }
+  if (target.kind === "MESSAGE") {
+    return (
+      <div className="space-y-1">
+        <p className="font-semibold">Private message</p>
+        <p className="whitespace-pre-line rounded-xl bg-paper px-4 py-3 text-ink/80">
+          {target.body ?? `(${target.type.toLowerCase().replace("_", " ")} message)`}
+        </p>
+      </div>
+    );
+  }
   if (target.kind === "USER")
     return <p className="font-semibold">Player profile</p>;
   return <p className="text-mute">The reported item no longer exists.</p>;

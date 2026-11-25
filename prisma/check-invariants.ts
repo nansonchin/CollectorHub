@@ -248,6 +248,31 @@ async function main() {
     }
   }
 
+  // 10. 私聊对话的结构必须正确：
+  //     每个 DIRECT 对话恰好有两个成员，directKey 正好是这两个成员 id（排序后）拼成的；
+  //     未读数不能是负数。
+  //     （未读数是否和消息对得上，没有放进这里：消息正在发送的瞬间，计数器和时间戳会有极短暂的
+  //      不一致，检查它会产生误报。）
+  const conversations = await prisma.conversation.findMany({
+    where: { type: "DIRECT" },
+    select: {
+      id: true,
+      directKey: true,
+      members: { select: { userId: true, unreadCount: true } },
+    },
+  });
+  for (const conversation of conversations) {
+    const ids = conversation.members.map((member) => member.userId).sort();
+    if (ids.length !== 2) {
+      problems.push(`Conversation ${conversation.id} has ${ids.length} members (expected 2)`);
+    } else if (conversation.directKey !== `${ids[0]}:${ids[1]}`) {
+      problems.push(`Conversation ${conversation.id}: directKey does not match its members`);
+    }
+    if (conversation.members.some((member) => member.unreadCount < 0)) {
+      problems.push(`Conversation ${conversation.id} has a negative unread count`);
+    }
+  }
+
   console.log(
     `Checked ${wallets.length} wallets, ${inventory.length} inventory rows, ${openListings.length} open listing groups.`,
   );

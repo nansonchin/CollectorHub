@@ -80,6 +80,7 @@ enum ReportTargetType {
   LISTING
   USER
   REVIEW
+  MESSAGE
 }
 
 enum ReportReason {
@@ -157,6 +158,20 @@ enum NotificationType {
   MODERATION_WARNING
 }
 
+// 对话的类型。目前只有两个人之间的私聊（DIRECT）；GUILD 留给公会聊天
+// （公会聊天也是"一个对话 + 一群成员"，可以复用同样的结构）。
+enum ConversationType {
+  DIRECT
+  GUILD
+}
+
+// 消息的类型：普通文字 / 分享一张卡牌 / 邀请对方交换。
+enum MessageType {
+  TEXT
+  CARD
+  TRADE_INVITE
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -175,6 +190,7 @@ model Card {
   orders      Order[]
   tradeItems  TradeItem[]
   quests      Quest[]
+  messages    Message[]
 
   @@index([element])
   @@index([rarity])
@@ -487,6 +503,62 @@ model Notification {
   @@index([userId, readAt]) // 未读数量
 }
 
+// 一个对话。两个人之间的私聊：每一对玩家只有一个对话。
+//
+// directKey = "较小的用户id:较大的用户id"（两个 id 按字母顺序排好再拼起来）。
+// 它是唯一的，所以不管是 A 先找 B，还是 B 先找 A，甚至两个人同时点"发消息"，
+// 数据库都只会留下一个对话。这和"同一次结账只能有一条付款"是同一个思路：
+// 需要"只有一个"的事，让数据库的唯一约束来保证。
+//
+// lastMessageAt / lastMessagePreview 是"冗余字段"：最后一条消息的时间和摘要。
+// 对话列表要显示它们，如果每个对话都去查一次最后一条消息，就是 N+1 问题。
+// 发消息时顺手更新，换来列表页一次查询搞定。
+model Conversation {
+  id                 String               @id @default(cuid())
+  type               ConversationType     @default(DIRECT)
+  directKey          String?              @unique
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  createdAt          DateTime             @default(now())
+  members            ConversationMember[]
+  messages           Message[]
+
+  @@index([lastMessageAt])
+}
+
+// 对话里的一个参与者，同时记录"他读到哪了"。
+// unreadCount 是冗余的计数器：发消息时给其他成员 +1，他打开对话时清零。
+// 导航栏要显示"总共几条未读"，对话列表要显示"每个对话几条未读"，
+// 用计数器就是一次简单的求和，不用每次去数消息。
+model ConversationMember {
+  conversationId String
+  userId         String
+  unreadCount    Int          @default(0)
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  type           MessageType  @default(TEXT)
+  body           String? // TEXT 类型的文字内容
+  cardId         String? // CARD 类型分享的卡牌
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  card           Card?        @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt]) // 读取一个对话的消息：按时间排
+  @@index([senderId, createdAt]) // 限流：某个人最近发了几条
+}
+
 // ---------------------------------------------------------------------
 // 以下四张表是 Better Auth 需要的标准结构（账号、登录状态、验证码）。
 // 字段名由这个库规定，不要改名；以后需要的自定义字段（例如 role）
@@ -528,6 +600,8 @@ model User {
   questsCreated       Quest[]       @relation("QuestCreator")
   questsAccepted      Quest[]       @relation("QuestAccepter")
   notifications       Notification[]
+  conversations       ConversationMember[]
+  messagesSent        Message[]     @relation("MessageSender")
 
   @@map("user")
 }
