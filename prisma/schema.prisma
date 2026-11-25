@@ -137,6 +137,26 @@ enum QuestStatus {
   EXPIRED
 }
 
+// 通知的类型。每种类型对应一件"和你有关的事"，显示的文字由类型 + data 在读取时生成
+// （见 notifications.render.ts），所以以后改措辞、做多语言，不需要改数据库里的旧数据。
+enum NotificationType {
+  TRADE_OFFER_RECEIVED
+  TRADE_ACCEPTED
+  TRADE_REJECTED
+  TRADE_CANCELLED
+  TRADE_EXPIRED
+  QUEST_ACCEPTED
+  QUEST_DELIVERED
+  QUEST_REOPENED
+  QUEST_HOLD_EXPIRED
+  QUEST_EXPIRED
+  LISTING_SOLD
+  LISTING_RESERVED
+  RESERVATION_EXPIRED
+  REVIEW_RECEIVED
+  MODERATION_WARNING
+}
+
 // 官方卡牌：由系统管理，玩家只读。
 model Card {
   id          String          @id @default(cuid())
@@ -447,6 +467,26 @@ model Quest {
   @@index([status, acceptExpiresAt]) // 接单超时扫描
 }
 
+// 通知：发生了和某个玩家有关的事，就给他留一条。
+//
+// 只存"发生了什么"（type）和"相关的事实"（data：名字、卡名、数量等，创建时的快照），
+// 不存最终显示的句子。读取时再由 type + data 拼出文字和跳转链接。
+// 通知和引发它的业务操作在【同一个事务】里创建：
+//   操作成功 → 通知一定存在；操作被撤销 → 通知也一起撤销，不会出现"通知说卖出去了，其实没成交"。
+// readAt 为空表示未读。
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  data      Json             @default("{}")
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt]) // 通知列表：我最新的通知
+  @@index([userId, readAt]) // 未读数量
+}
+
 // ---------------------------------------------------------------------
 // 以下四张表是 Better Auth 需要的标准结构（账号、登录状态、验证码）。
 // 字段名由这个库规定，不要改名；以后需要的自定义字段（例如 role）
@@ -487,6 +527,7 @@ model User {
   tradesReceived      Trade[]       @relation("TradeRecipient")
   questsCreated       Quest[]       @relation("QuestCreator")
   questsAccepted      Quest[]       @relation("QuestAccepter")
+  notifications       Notification[]
 
   @@map("user")
 }
