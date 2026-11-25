@@ -1,3 +1,4 @@
+"use client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MAX_MESSAGE_LENGTH, POLL_INTERVAL_MS, POLL_OVERLAP_MS } from "../messages.config";
