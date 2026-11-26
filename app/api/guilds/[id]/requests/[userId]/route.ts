@@ -29,11 +29,13 @@ export async function POST(
   const { id, userId } = await params;
 
   try{
+
     if(parsed.data.action === "approve"){
-      await approveRequest(session.user.id,id,userId),
+      await approveRequest(session.user.id,id,userId)
     }else{
       await rejectRequest(session.user.id,id,userId)
     }
+
     return NextResponse.json({
       ok:true
     })
