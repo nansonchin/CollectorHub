@@ -4,6 +4,7 @@ import { manageMember } from "@/src/features/guilds/guilds.service";
 import { getSession } from "@/src/lib/session";
 import { NextResponse } from "next/server";
 
+//manageMember "kick" | "promote" | "demote" | "transfer"
 export async function POST(
     request:Request,
     { params }: { params: Promise<{ id: string; userId: string }> },
