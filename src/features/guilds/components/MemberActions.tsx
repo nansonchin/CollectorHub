@@ -58,10 +58,9 @@ export function MemberActions({
           ERROR_MESSAGES[body?.error as string] ??
             "Something went wrong. Please try again.",
         );
-
-        setConfirming(null);
-        router.refresh();
       }
+      setConfirming(null);
+      router.refresh();
     } catch {
       setError("Could not refresh reach the server");
     } finally {
@@ -122,7 +121,7 @@ export function MemberActions({
         >
           {error}
         </p>
-      )}    
+      )}
     </div>
   );
 }

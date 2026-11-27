@@ -189,7 +189,7 @@ export function GuildActions({ guildId, guildName, mode }: Props) {
         ) : (
           <button
             type="button"
-            onClick={() => setConfirmingLeave}
+            onClick={() => setConfirmingLeave(true)}
             className={`${buttonBase} bg-paper hover:bg-gold-100`}
           >
             Leave guild
