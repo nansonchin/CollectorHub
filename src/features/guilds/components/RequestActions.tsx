@@ -11,7 +11,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: "Your session has expired. Please sign in again.",
 };
 
-export function RequestAction({
+export function RequestActions({
   guildId,
   userId,
 }: {

@@ -13,6 +13,7 @@ export function formatDateML(date: Date) {
     year: "numeric",
   });
 }
+
 export function formatDateSH(date: Date) {
   return date.toLocaleString("en-US", {
     month: "short",
