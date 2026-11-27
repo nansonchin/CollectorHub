@@ -49,8 +49,8 @@ export class GuildError extends Error {
 
 async function lockGuild(tx: Tx, guildId: string) {
   const rows = await tx.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM "GUILD" WHERE "id" = ${guildId} FOR UPDATE
-    `;
+    SELECT "id" FROM "Guild" WHERE "id" = ${guildId} FOR UPDATE
+  `;
   if (rows.length === 0) throw new GuildError("GUILD_NOT_FOUND");
 }
 
@@ -129,7 +129,7 @@ export async function updateGuild(
   guildId: string,
   input: UpdateGuildInput,
 ) {
-  const actor = await prisma.guildMember.findunique({
+  const actor = await prisma.guildMember.findUnique({
     where: {
       guildId_userId: { guildId, userId: actorId },
     },
@@ -267,28 +267,18 @@ export async function approveRequest(
     await lockGuild(tx, guildId);
 
     const actor = await getMember(tx, guildId, actorId);
-    if (!actor || !canReviewRequests(actor.role)) {
+    if (!actor || !canReviewRequests(actor.role))
       throw new GuildError("FORBIDDEN");
-    }
 
     const claimed = await tx.guildJoinRequest.deleteMany({
       where: { guildId, userId: applicantId },
     });
-
-    if (claimed.count === 0) {
-      throw new GuildError("REQUEST_NOT_FOUND");
-    }
+    if (claimed.count === 0) throw new GuildError("REQUEST_NOT_FOUND");
 
     // count guild members + applicantId, if full the this  transaction will be null and the join Request will be auto ccancel
 
-    const size = await tx.guildMember.count({
-      where: {
-        guildId,
-      },
-    });
-    if (size >= MAX_GUILD_MEMBERS) {
-      throw new GuildError("GUILD_FULL");
-    }
+    const size = await tx.guildMember.count({ where: { guildId } });
+    if (size >= MAX_GUILD_MEMBERS) throw new GuildError("GUILD_FULL");
 
     const { count } = await tx.guildMember.createMany({
       data: [{ guildId, userId: applicantId }],
@@ -297,15 +287,12 @@ export async function approveRequest(
     if (count === 0) throw new GuildError("ALREADY_IN_GUILD");
 
     // if joinned guild, delete all the request from this person
-    await tx.guildJoinRequest.deleteMany({
-      where: { userId: applicantId },
-    });
+    await tx.guildJoinRequest.deleteMany({ where: { userId: applicantId } });
 
     const guild = await tx.guild.findUniqueOrThrow({
       where: { id: guildId },
       select: { name: true },
     });
-
     await notify(tx, {
       userId: applicantId,
       type: "GUILD_REQUEST_APPROVED",
@@ -517,7 +504,7 @@ export async function listGuilds(query: { q?: string; page: number }) {
         },
       },
       orderBy: {
-        createAt: "desc",
+        createdAt: "desc",
       },
       skip: (query.page - 1) * GUILDS_PER_PAGE,
       take: GUILDS_PER_PAGE,
@@ -533,25 +520,33 @@ export async function listGuilds(query: { q?: string; page: number }) {
   };
 }
 
-export async function getMyGuild(userId:string){
+export async function getMyGuild(userId: string) {
   return prisma.guildMember.findUnique({
     where: { userId },
     include: {
-      guild: { select: { id: true, name: true, _count: { select: { members: true } } } },
+      guild: {
+        select: { id: true, name: true, _count: { select: { members: true } } },
+      },
     },
   });
 }
 
-const ROLE_ORDER: Record<GuildRole, number> = { OWNER: 0, MODERATOR: 1, MEMBER: 2 };
+const ROLE_ORDER: Record<GuildRole, number> = {
+  OWNER: 0,
+  MODERATOR: 1,
+  MEMBER: 2,
+};
 
-export async function getGuildDetail(guildId:string,viewerId:string |null){
-    const guild = await prisma.guild.findUnique({
+export async function getGuildDetail(guildId: string, viewerId: string | null) {
+  const guild = await prisma.guild.findUnique({
     where: { id: guildId },
-    include: { members: { include: { user: { select: { id: true, name: true } } } } },
+    include: {
+      members: { include: { user: { select: { id: true, name: true } } } },
+    },
   });
 
-  if(!guild){
-    return null
+  if (!guild) {
+    return null;
   }
 
   const members = [...guild.members].sort(
@@ -560,8 +555,10 @@ export async function getGuildDetail(guildId:string,viewerId:string |null){
       a.joinedAt.getTime() - b.joinedAt.getTime(),
   );
 
-  const viewerMember = viewerId?members.find((member)=>member.userId === viewerId):undefined
-  const viewerRole =(viewerMember?.role as GuildRole |undefined) ?? null
+  const viewerMember = viewerId
+    ? members.find((member) => member.userId === viewerId)
+    : undefined;
+  const viewerRole = (viewerMember?.role as GuildRole | undefined) ?? null;
 
   const requests =
     viewerRole && canReviewRequests(viewerRole)
@@ -572,10 +569,10 @@ export async function getGuildDetail(guildId:string,viewerId:string |null){
         })
       : [];
 
-    let hasRequested= false;
-    let inOtherGuild = false;
-    if(viewerId && !viewerMember){
-         const [request, membership] = await Promise.all([
+  let hasRequested = false;
+  let inOtherGuild = false;
+  if (viewerId && !viewerMember) {
+    const [request, membership] = await Promise.all([
       prisma.guildJoinRequest.findUnique({
         where: { guildId_userId: { guildId, userId: viewerId } },
       }),
@@ -583,9 +580,9 @@ export async function getGuildDetail(guildId:string,viewerId:string |null){
     ]);
     hasRequested = request !== null;
     inOtherGuild = membership !== null;
-    }
+  }
 
-     return {
+  return {
     guild: {
       id: guild.id,
       name: guild.name,

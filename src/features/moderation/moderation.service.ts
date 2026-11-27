@@ -6,6 +6,7 @@ import { Tx } from "../economy/wallet.service";
 import { releaseAllTradesForUser } from "../trades/trades.service";
 import { releaseAllQuestsForUser } from "../quests/quests.service";
 import { notify } from "../notifications/notifications.service";
+import { removeUserFromGuilds } from "../guilds/guilds.service";
 
 // admin || moderator function reporting
 export type ModerationErrorCode =
@@ -130,7 +131,7 @@ export async function banUser(tx: Tx, userId: string, reason: string) {
   await tx.session.deleteMany({ where: { userId } });
   await releaseAllTradesForUser(tx, userId);
   await releaseAllQuestsForUser(tx, userId);
-
+await removeUserFromGuilds(tx, userId);
   const reservations = await tx.reservation.findMany({
     where: { buyerId: userId, status: "ACTIVE" },
     select: { id: true, listingId: true },

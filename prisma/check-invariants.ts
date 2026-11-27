@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { MAX_GUILD_MEMBERS } from "../src/features/guilds/guilds.config";
 import { prisma } from "../src/lib/prisma";
 
 // 数据"不变量"检查：不管用户怎么操作，这些等式永远应该成立。
@@ -270,6 +271,29 @@ async function main() {
     }
     if (conversation.members.some((member) => member.unreadCount < 0)) {
       problems.push(`Conversation ${conversation.id} has a negative unread count`);
+    }
+  }
+
+  // 11. 公会必须结构正确：
+  //     每个公会恰好有一个会长；人数不超过上限；被封号的人不能还在任何公会里。
+  //     （"一个人只能在一个公会"由数据库的唯一约束保证，不需要在这里检查。）
+  const guilds = await prisma.guild.findMany({
+    select: {
+      id: true,
+      name: true,
+      members: { select: { role: true, user: { select: { bannedAt: true } } } },
+    },
+  });
+  for (const guild of guilds) {
+    const owners = guild.members.filter((member) => member.role === "OWNER").length;
+    if (owners !== 1) {
+      problems.push(`Guild "${guild.name}" has ${owners} owners (expected exactly 1)`);
+    }
+    if (guild.members.length > MAX_GUILD_MEMBERS) {
+      problems.push(`Guild "${guild.name}" has ${guild.members.length} members (max ${MAX_GUILD_MEMBERS})`);
+    }
+    if (guild.members.some((member) => member.user.bannedAt !== null)) {
+      problems.push(`Guild "${guild.name}" still has a banned member`);
     }
   }
 

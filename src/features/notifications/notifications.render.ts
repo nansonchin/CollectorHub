@@ -13,12 +13,14 @@ export function describeNotification(
       : {}
   ) as Record<string, unknown>;
 
-  const text =(key:string,fallback="")=>{
-    return data[key] === undefined || data[key] === null ? fallback: String(data[key])
-  }
-    const gold = (key: string) => Number(data[key] ?? 0).toLocaleString("en-US");
+  const text = (key: string, fallback = "") => {
+    return data[key] === undefined || data[key] === null
+      ? fallback
+      : String(data[key]);
+  };
+  const gold = (key: string) => Number(data[key] ?? 0).toLocaleString("en-US");
 
-    switch (type) {
+  switch (type) {
     case "TRADE_OFFER_RECEIVED":
       return {
         title: "New trade offer",
@@ -111,6 +113,50 @@ export function describeNotification(
         title: "Warning from moderators",
         body: text("message", "A moderator sent you a warning."),
         href: "/account",
+      };
+    case "GUILD_JOIN_REQUEST":
+      return {
+        title: "Guild join request",
+        body: `${text("fromName", "Someone")} asked to join ${text("guildName", "your guild")}.`,
+        href: `/guilds/${text("guildId")}`,
+      };
+      case "GUILD_REQUEST_APPROVED":
+      return {
+        title: "Welcome to the guild",
+        body: `${text("guildName", "The guild")} accepted your request.`,
+        href: `/guilds/${text("guildId")}`,
+      };
+    case "GUILD_REQUEST_REJECTED":
+      return {
+        title: "Request declined",
+        body: `${text("guildName", "The guild")} declined your request to join.`,
+        href: "/guilds",
+      };
+    case "GUILD_MEMBER_REMOVED":
+      return {
+        title: "Removed from guild",
+        body: `You were removed from ${text("guildName", "your guild")}.`,
+        href: "/guilds",
+      };
+    case "GUILD_ROLE_CHANGED": {
+      const role = text("role");
+      const what =
+        role === "OWNER"
+          ? "the owner"
+          : role === "MODERATOR"
+            ? "a moderator"
+            : "a regular member";
+      return {
+        title: "Guild role changed",
+        body: `You are now ${what} of ${text("guildName", "your guild")}.`,
+        href: `/guilds/${text("guildId")}`,
+      };
+    }
+    case "GUILD_DISBANDED":
+      return {
+        title: "Guild disbanded",
+        body: `${text("guildName", "Your guild")} was disbanded by its owner.`,
+        href: "/guilds",
       };
   }
 }

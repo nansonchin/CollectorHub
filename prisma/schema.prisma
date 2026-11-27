@@ -33,6 +33,7 @@ enum LedgerType {
   FEE // 交易手续费
   TOP_UP // 模拟充值
   TRADE_GOLD // 卡牌交换时附带的 Gold
+  GUILD_CREATION // 创建公会的费用
 }
 
 // 挂单的状态机：AVAILABLE → RESERVED → SOLD，或 AVAILABLE → CANCELLED / EXPIRED。
@@ -156,6 +157,12 @@ enum NotificationType {
   RESERVATION_EXPIRED
   REVIEW_RECEIVED
   MODERATION_WARNING
+  GUILD_JOIN_REQUEST
+  GUILD_REQUEST_APPROVED
+  GUILD_REQUEST_REJECTED
+  GUILD_MEMBER_REMOVED
+  GUILD_ROLE_CHANGED
+  GUILD_DISBANDED
 }
 
 // 对话的类型。目前只有两个人之间的私聊（DIRECT）；GUILD 留给公会聊天
@@ -170,6 +177,17 @@ enum MessageType {
   TEXT
   CARD
   TRADE_INVITE
+}
+
+// 公会里的角色。声明的顺序就是权力的大小顺序（OWNER 最大），
+// 数据库按枚举顺序排序时，会长排最前、副会长其次、普通成员最后。
+//   OWNER      会长：一个公会恰好一个。可以做一切，包括任命副会长、转让会长、解散公会
+//   MODERATOR  副会长：审批入会申请、编辑公告、踢出普通成员
+//   MEMBER     普通成员：聊天、离开
+enum GuildRole {
+  OWNER
+  MODERATOR
+  MEMBER
 }
 
 // 官方卡牌：由系统管理，玩家只读。
@@ -559,6 +577,53 @@ model Message {
   @@index([senderId, createdAt]) // 限流：某个人最近发了几条
 }
 
+// 公会。
+// nameKey 是名字"规范化"之后的样子（小写、多个空格合成一个），是唯一的。
+// 这样 "Dragon Slayers" 和 "dragon  slayers" 会被认为是同一个名字，
+// 而 name 保留玩家写的原样用来显示。
+model Guild {
+  id                    String             @id @default(cuid())
+  name                  String
+  nameKey               String             @unique
+  description           String?
+  announcement          String?
+  announcementUpdatedAt DateTime?
+  createdAt             DateTime           @default(now())
+  members               GuildMember[]
+  joinRequests          GuildJoinRequest[]
+
+  @@index([createdAt])
+}
+
+// 公会成员。
+// userId 单独是唯一的：一个人同一时间最多只能在一个公会里。
+// 这条规则由数据库保证，不是靠代码"先查有没有加入过"。
+model GuildMember {
+  guildId  String
+  userId   String    @unique
+  role     GuildRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+  guild    Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, userId])
+  @@index([guildId, role])
+}
+
+// 入会申请。只在"等待审批"期间存在：批准或拒绝之后这一行就删除了
+// （结果通过通知告诉申请人，所以不需要保留历史）。
+model GuildJoinRequest {
+  guildId   String
+  userId    String
+  message   String?
+  createdAt DateTime @default(now())
+  guild     Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, userId]) // 同一个人对同一个公会只能有一个待审批的申请
+  @@index([userId])
+}
+
 // ---------------------------------------------------------------------
 // 以下四张表是 Better Auth 需要的标准结构（账号、登录状态、验证码）。
 // 字段名由这个库规定，不要改名；以后需要的自定义字段（例如 role）
@@ -601,6 +666,8 @@ model User {
   questsAccepted      Quest[]       @relation("QuestAccepter")
   notifications       Notification[]
   conversations       ConversationMember[]
+  guildMembership     GuildMember?
+  guildJoinRequests   GuildJoinRequest[]
   messagesSent        Message[]     @relation("MessageSender")
 
   @@map("user")

@@ -1,3 +1,4 @@
+"use client"
 import { refresh } from "next/cache";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";

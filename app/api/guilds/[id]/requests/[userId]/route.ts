@@ -9,7 +9,6 @@ export async function POST(
   { params }: { params: Promise<{ id: string; userId: string }> },
 ) {
   const session = await getSession();
-
   if (!session) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
@@ -28,19 +27,14 @@ export async function POST(
 
   const { id, userId } = await params;
 
-  try{
-
-    if(parsed.data.action === "approve"){
-      await approveRequest(session.user.id,id,userId)
-    }else{
-      await rejectRequest(session.user.id,id,userId)
+  try {
+    if (parsed.data.action === "approve") {
+      await approveRequest(session.user.id, id, userId);
+    } else {
+      await rejectRequest(session.user.id, id, userId);
     }
-
-    return NextResponse.json({
-      ok:true
-    })
-  }catch(error){
-    return guildErrorResponse(error)
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return guildErrorResponse(error);
   }
 }
-

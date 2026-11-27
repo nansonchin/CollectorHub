@@ -195,8 +195,8 @@ export default async function GuildPage({ params }: Props) {
               if (canKick(viewerRole, member.role)) actions.push("kick");
               if (canManageRoles(viewerRole) && member.role !== "OWNER") {
                 actions.push(member.role === "MEMBER" ? "promote" : "demote");
+                actions.push("transfer");
               }
-              actions.push("transfer");
             }
 
             return (

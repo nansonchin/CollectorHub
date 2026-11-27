@@ -27,19 +27,16 @@ export function RequestActions({
     setPending(action);
 
     try {
-      const response = await fetch(
-        `/api/guilds/${guildId}/requests/${userId}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
-        },
-      );
+      const response = await fetch(`/api/guilds/${guildId}/requests/${userId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         setError(
-          ERROR_MESSAGES[body?.error as string] ??
-            "Something went wrong. Please try again.",
+          ERROR_MESSAGES[body?.error as string] ?? "Something went wrong. Please try again.",
         );
       }
       router.refresh();

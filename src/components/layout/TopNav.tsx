@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { href: "/inventory", label: "Inventory", icon: Backpack, enabled: true },
   { href: "/orders", label: "Orders", icon: Receipt, enabled: true },
   { href: "/quests", label: "Quests", icon: ScrollText, enabled: true },
-  { href: "/guild", label: "Guild", icon: Shield, enabled: false },
+  { href: "/guilds", label: "Guild", icon: Shield, enabled: true  },
   { href: "/trades", label: "Trade", icon: ArrowLeftRight, enabled: true },
    { href: "/messages", label: "Messages", icon: MessageSquare, enabled: true },
 ];

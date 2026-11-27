@@ -109,7 +109,7 @@ export default async function GuildsPage({
           {list.items.length > 0 ? (
             <>
               <ul className="grid gap-4 sm:grid-cols-2">
-                {list.items.gap((guild) => {
+                {list.items.map((guild) => {
                   const owner = guild.members[0]?.user;
                   const full = guild._count.members >= MAX_GUILD_MEMBERS;
                   return (

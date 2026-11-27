@@ -6,7 +6,8 @@ export type LedgerTypeName =
   | "PURCHASE"
   | "FEE"
   | "TOP_UP"
-  | "TRADE_GOLD";
+  | "TRADE_GOLD"
+  | "GUILD_CREATION";
 
 export const LEDGER_LABELS: Record<LedgerTypeName, string> = {
   SIGNUP_BONUS: "Welcome bonus",
@@ -17,4 +18,5 @@ export const LEDGER_LABELS: Record<LedgerTypeName, string> = {
   FEE: "Market fee",
   TOP_UP: "Top-up",
   TRADE_GOLD: "Trade",
+  GUILD_CREATION: "Guild creation",
 };
